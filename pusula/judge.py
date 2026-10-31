@@ -23,7 +23,16 @@ from importlib import resources
 from pathlib import Path
 
 from .jsonl import JsonlWriter, done_ids, read_jsonl
-from .llm import DEFAULT_BASE_URL, DEFAULT_MODEL, ServerUnavailable, chat_json, console, make_client, run_pool, wait_for_server
+from .llm import (
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    ServerUnavailable,
+    chat_json,
+    console,
+    make_client,
+    run_pool,
+    wait_for_server,
+)
 from .schema import Example
 from .taxonomy import load_taxonomy
 

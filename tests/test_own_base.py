@@ -5,12 +5,12 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
+from test_d3model import FakeDecider  # noqa: E402
+
 from pusula.d3model import D3Decider  # noqa: E402
 from pusula.inference import D3Engine  # noqa: E402
 from pusula.schema import Question  # noqa: E402
 from pusula.taxonomy import Q_TOPIC, load_taxonomy, topic_questions  # noqa: E402
-
-from test_d3model import FakeDecider  # noqa: E402
 
 
 class RecordingDecider(FakeDecider):

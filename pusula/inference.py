@@ -19,8 +19,16 @@ import torch
 
 from .model import PairEncoder, PusulaModel
 from .schema import Question, answer_from_probs
-from .taxonomy import (Q_DOMAIN, Q_INTENT, Q_SUBDOMAIN, Q_TOPIC, Taxonomy, load_taxonomy, topic_questions,
-                       universal_subset)
+from .taxonomy import (
+    Q_DOMAIN,
+    Q_INTENT,
+    Q_SUBDOMAIN,
+    Q_TOPIC,
+    Taxonomy,
+    load_taxonomy,
+    topic_questions,
+    universal_subset,
+)
 
 QuestionsIn = Mapping[str, Question | Mapping[str, Any]]
 
