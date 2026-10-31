@@ -10,8 +10,10 @@ After training, one temperature per question type is fitted on the validation sp
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import random
+import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -199,7 +201,17 @@ def train(args) -> None:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model)
+    # older callers (curate.flag_noise) build the Namespace by hand: the checkpoint options default to off
+    init, save_every, max_steps = getattr(args, "init", None), getattr(args, "save_every", 0), getattr(args, "max_steps", 0)
+    ckpt = out / "ckpt"
+    resume = getattr(args, "resume", False) and ckpt.exists()
+    source = ckpt if resume else init
+    if source:
+        model, tokenizer, _ = PusulaModel.load(source, device=device)
+        model.meta.pop("max_length", None)  # saved files take this run's --max-length, not the source's
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.base_model)
+    state = torch.load(ckpt / "trainer.pt", map_location="cpu", weights_only=False) if resume else None
     enc = PairEncoder(tokenizer, max_length=args.max_length)
     t0 = time.time()
     train_data = Encoded(read_examples(Path(args.data) / "train.jsonl"), enc)
@@ -207,8 +219,9 @@ def train(args) -> None:
     console.print(f"[cyan]Tokenizasyon {time.time() - t0:.0f}s: train {len(train_data.items)} soru, "
                   f"val {len(val_data.items)} soru[/cyan]")
 
-    model = PusulaModel.from_base(args.base_model).to(device)
-    model.meta.update({"base_model": args.base_model})
+    if not source:
+        model = PusulaModel.from_base(args.base_model).to(device)
+        model.meta.update({"base_model": args.base_model})
     params = [
         {"params": model.encoder.parameters(), "lr": args.lr},
         {"params": model.scorer.parameters(), "lr": args.head_lr},
@@ -222,11 +235,53 @@ def train(args) -> None:
 
     log = (out / "train_log.jsonl").open("a", encoding="utf-8")
     best, step = -1.0, 0
-    for epoch in range(1, args.epochs + 1):
+    if state:
+        opt.load_state_dict(state["optimizer"])
+        sched.load_state_dict(state["scheduler"])
+        best, step = state["best"], state["step"]
+        rng.setstate(state["rng"])
+        log.seek(state["log_position"])
+        log.truncate()
+
+    def checkpoint(done: bool = False) -> None:
+        """Publish a complete checkpoint with a Linux atomic directory exchange."""
+        tmp = out / "ckpt.tmp"
+        shutil.rmtree(tmp, ignore_errors=True)
+        saved = dict(optimizer=opt.state_dict(), scheduler=sched.state_dict(), epoch=epoch,
+                     batch=i, step=step, best=best, rng=epoch_rng, torch_rng=torch.get_rng_state(),
+                     cuda_rng=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+                     running=running, done=done, log_position=log.tell())
+        model.save(tmp, tokenizer, args.max_length)
+        torch.save(saved, tmp / "trainer.pt")
+        if ckpt.exists():
+            libc = ctypes.CDLL(None, use_errno=True)
+            if libc.renameat2(-100, bytes(tmp), -100, bytes(ckpt), 2) != 0:  # RENAME_EXCHANGE
+                raise OSError(ctypes.get_errno(), "checkpoint exchange failed")
+            shutil.rmtree(tmp)
+        else:
+            tmp.replace(ckpt)
+
+    for epoch in range(state["epoch"] if state else 1, args.epochs + 1):
         model.train()
+        epoch_rng = rng.getstate()
         batches = make_batches(train_data, enc, args.token_budget, args.max_train_options, rng)
         t_epoch, running = time.time(), 0.0
+        finished = state["batch"] if state else 0
+        if state:
+            torch.set_rng_state(state["torch_rng"])
+            if state["cuda_rng"] is not None:
+                torch.cuda.set_rng_state_all(state["cuda_rng"])
+            running = state["running"]
+            done = state["done"]
+            state = None
+            if done:
+                continue
+        if max_steps and step >= max_steps:
+            log.close()
+            return
         for i, batch in enumerate(batches, 1):
+            if i <= finished:
+                continue
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device.type == "cuda"):
                 logits, _ = forward_batch(model, enc, train_data, batch, device)
             loss = batch_loss(logits, batch, args.alpha, device)
@@ -244,6 +299,12 @@ def train(args) -> None:
                 console.print(f"epoch {epoch} adım {i}/{len(batches)} loss {avg:.4f} ({rate:.1f} adım/s)")
                 log.write(json.dumps({"epoch": epoch, "step": step, "loss": avg}) + "\n")
                 log.flush()
+            stop = max_steps > 0 and step >= max_steps
+            if save_every > 0 and (step % save_every == 0 or stop):
+                checkpoint()
+            if stop:
+                log.close()
+                return
         m = metrics(predict(model, enc, val_data, device, args.token_budget))
         console.print(f"[bold]epoch {epoch}[/bold] val macro_acc {m['macro_acc']:.4f} ece {m['ece']:.4f} "
                       f"({time.time() - t_epoch:.0f}s)")
@@ -252,7 +313,11 @@ def train(args) -> None:
         if m["macro_acc"] > best:
             best = m["macro_acc"]
             model.save(out / "best", tokenizer, args.max_length)
+        if save_every > 0:
+            i = len(batches)
+            checkpoint(done=True)
 
+    log.close()
     model, _, _ = PusulaModel.load(out / "best", device=device)
     preds = predict(model, enc, val_data, device, args.token_budget)
     model.temperature = fit_temperatures(preds)
@@ -269,6 +334,10 @@ def main(argv=None) -> None:
     p.add_argument("--data", required=True, help="directory with train.jsonl and val.jsonl")
     p.add_argument("--out", required=True)
     p.add_argument("--base-model", default=BASE_MODEL)
+    p.add_argument("--init", help="initialize from a saved Pusula model")
+    p.add_argument("--resume", action="store_true")
+    p.add_argument("--save-every", type=int, default=0)
+    p.add_argument("--max-steps", type=int, default=0)
     p.add_argument("--max-length", type=int, default=1024)
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--lr", type=float, default=3e-5)
