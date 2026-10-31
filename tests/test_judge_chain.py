@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 from pusula import judge
 from pusula.jsonl import read_jsonl
 from pusula.schema import Question
@@ -13,6 +15,9 @@ LABEL20 = Path(__file__).resolve().parents[1] / "runs" / "api" / "v20" / "label2
 
 
 def _label20():
+    # label20.py is a local pipeline script outside the repository (runs/ is not published): skip where it is absent (CI)
+    if not LABEL20.is_file():
+        pytest.skip("runs/api/v20/label20.py is not in the repository")
     spec = importlib.util.spec_from_file_location("label20_t", LABEL20)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
