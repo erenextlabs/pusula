@@ -38,8 +38,8 @@ accuracy on Turkish is limited. **Pusula is Decision 3.0 adapted to Turkish.**
 
 | Model | Size | Runs on | Benchmark / gold set | Use it for |
 |---|---|---|---|---|
-| **Pusula** (Turkish Decision 3.0) | 26B: a 0.9 GB LoRA adapter on top of `vllm-sr/d3` | GPU: ≥ 64 GB in BF16, ≥ 24 GB in 4-bit | **92.2 / 93.1** | Highest accuracy, for built-in and custom questions |
-| **Pusula Nano** | 149M ([TabiBERT](https://huggingface.co/boun-tabilab/TabiBERT) cross-encoder) | CPU or any GPU | 83.3 / 91.3 | High volume and low latency on the built-in questions |
+| **Pusula** (Turkish Decision 3.0) | 26B: a 0.9 GB LoRA adapter on top of `vllm-sr/d3` | GPU: ≥ 64 GB in BF16, ≥ 24 GB in 4-bit | **92.0 / 92.1** | Highest accuracy, for built-in and custom questions |
+| **Pusula Nano** | 149M ([TabiBERT](https://huggingface.co/boun-tabilab/TabiBERT) cross-encoder) | CPU or any GPU | 83.2 / 91.3 | High volume and low latency on the built-in questions |
 
 Both models accept identical requests.
 
@@ -58,64 +58,62 @@ v1.0. The MASSIVE and OffensEval scores of Decision 3.0 and Pusula 1.0 are those
 
 | Evaluation | Questions | Decision 3.0 | Pusula 1.0 | **Pusula 2.0** | Pusula Nano 1.0 | **Pusula Nano 2.0** |
 |---|---:|---:|---:|---:|---:|---:|
-| Real customer messages (500 held-out, licensed) | 7,500 | 84.0 | 88.5 | **91.8** | 64.0 | **88.9** |
-| Long customer complaints (500 held-out, licensed) | 4,500 | 81.5 | 88.1 | **87.9** | 84.6 | **85.2** |
-| [Turkish Decision Benchmark](benchmark/README.md) (2,194 messages) | 19,861 | 88.5 | 92.6 | **92.2** | 82.7 | **83.3** |
-| Gold test set (757 held-out messages) | 11,355 | 86.3 | 90.5 | **93.1** | 62.8 | **91.3** |
-| Custom questions in unseen sectors | 400 | 92.8 | 91.2 | **93.5** | 50.5 | **53.2** |
-| Missing information (`eksik_bilgi`) | 99 | 98.0 | 96.0 | **88.9** | 58.6 | **50.5** |
-| Sales opportunity (`satis_firsati`) | 100 | 97.0 | 97.0 | **97.0** | 51.0 | **94.0** |
-| Life and safety (`can_guvenligi`) | 120 | 100.0 | 100.0 | **100.0** | 81.7 | **85.0** |
-| Insults and hate speech (`hakaret`) | 114 | 93.0 | 93.0 | **97.4** | 43.9 | **71.0** |
-| Fraud (`dolandiricilik`) | 97 | 99.0 | 100.0 | **99.0** | 51.5 | **66.0** |
-| Source grounding of agent answers (`kaynaga_dayanma`) | 100 | 93.0 | 93.0 | **97.0** | 30.0 | **34.0** |
-| AI agent questions (templates 17-20) | 300 | 96.8 | 97.5 | **97.5** | 51.2 | **65.5** |
-| Personal data in e-mails | 150 | 95.3 | 98.7 | **99.3** | 71.3 | **89.3** |
-| Hidden instructions in documents | 400 | 100.0 | 100.0 | **100.0** | 73.8 | **78.0** |
-| Long documents (about 12,000 characters) | 120 | 100.0 | 100.0 | **100.0** | 46.7 | **60.0** |
-| MASSIVE tr-TR, 60-way intent, zero-shot (human-written) | 2,974 | 85.3 | 85.2 | **85.2** | 36.4 | **26.9** |
-| OffensEval 2020 Turkish, offensive language (real tweets) | 3,528 | 88.4 | 88.3 | **88.3** | 30.6 | **80.9** |
+| Real customer messages (500 held-out, licensed) | 7,500 | 84.0 | 88.5 | **90.6** | 64.0 | **89.9** |
+| Long customer complaints (500 held-out, licensed) | 4,500 | 81.5 | 88.1 | **88.3** | 84.6 | **84.6** |
+| [Turkish Decision Benchmark](benchmark/README.md) (2,194 messages) | 19,861 | 88.5 | 92.6 | **92.0** | 82.7 | **83.2** |
+| Gold test set (757 held-out messages) | 11,355 | 86.3 | 90.5 | **92.1** | 62.8 | **91.3** |
+| Custom questions in unseen sectors | 400 | 92.8 | 91.2 | **93.5** | 50.5 | **55.5** |
+| Missing information (`eksik_bilgi`) | 99 | 98.0 | 96.0 | **98.0** | 58.6 | **53.5** |
+| Sales opportunity (`satis_firsati`) | 100 | 97.0 | 97.0 | **97.0** | 51.0 | **95.0** |
+| Life and safety (`can_guvenligi`) | 120 | 100.0 | 100.0 | **100.0** | 81.7 | **89.2** |
+| Insults and hate speech (`hakaret`) | 114 | 93.0 | 93.0 | **95.6** | 43.9 | **71.0** |
+| Fraud (`dolandiricilik`) | 97 | 99.0 | 100.0 | **100.0** | 51.5 | **69.1** |
+| Source grounding of agent answers (`kaynaga_dayanma`) | 100 | 93.0 | 93.0 | **98.0** | 30.0 | **38.0** |
+| AI agent questions (templates 17-20) | 300 | 96.8 | 97.5 | **97.8** | 51.2 | **68.2** |
+| Personal data in e-mails | 150 | 95.3 | 98.7 | **100.0** | 71.3 | **93.3** |
+| Hidden instructions in documents | 400 | 100.0 | 100.0 | **100.0** | 73.8 | **78.2** |
+| Long documents (about 12,000 characters) | 120 | 100.0 | 100.0 | **100.0** | 46.7 | **50.8** |
+| MASSIVE tr-TR, 60-way intent, zero-shot (human-written) | 2,974 | 85.3 | 85.2 | **85.2** | 36.4 | **32.7** |
+| OffensEval 2020 Turkish, offensive language (real tweets) | 3,528 | 88.4 | 88.3 | **88.3** | 30.6 | **81.8** |
 
 Gold test set, per question:
 
 | Question | Decision 3.0 | Pusula 1.0 | Pusula 2.0 |
 |---|---:|---:|---:|
-| Domain | 82.0 | **86.7** | 82.8 |
-| Message type | 69.0 | 79.9 | **93.4** |
-| Urgency (4 levels) | 53.1 | 78.7 | **82.8** |
-| Emotion | 89.2 | 88.5 | **92.7** |
-| Missing information | 71.5 | 76.3 | **90.8** |
-| Action required | 88.6 | 90.5 | **91.8** |
-| Human handoff | 81.4 | **89.2** | 87.1 |
-| Personal data | 96.4 | 96.2 | **96.7** |
-| Security risk | 95.6 | 98.7 | **99.2** |
+| Domain | 82.0 | **86.7** | 83.0 |
+| Message type | 69.0 | 79.9 | **93.3** |
+| Urgency (4 levels) | 53.1 | 78.7 | **84.0** |
+| Emotion | 89.2 | 88.5 | **93.9** |
+| Missing information | 71.5 | **76.3** | 70.9 |
+| Action required | 88.6 | 90.5 | **92.1** |
+| Human handoff | 81.4 | **89.2** | 87.6 |
+| Personal data | **96.4** | 96.2 | **96.4** |
+| Security risk | 95.6 | 98.7 | **99.1** |
 | Insults and hate speech | 99.2 | **100.0** | **100.0** |
 | Fraud | 92.1 | 94.6 | **98.8** |
 | Life and safety | 98.0 | 98.3 | **99.1** |
-| Legal risk | 95.5 | **95.6** | 95.2 |
-| Churn risk | 85.7 | 87.6 | **88.9** |
-| Sales opportunity | 97.2 | 96.7 | **97.9** |
+| Legal risk | 95.5 | 95.6 | **95.9** |
+| Churn risk | 85.7 | 87.6 | **89.3** |
+| Sales opportunity | 97.2 | 96.7 | **97.5** |
 
 - **Real customer messages:** Evaluation was performed on two held-out sets of 500 anonymized messages licensed
   from a commercial partner: customer messages (reviews, complaints and questions) and long, detailed customer
   complaints. These sets are not published. Other messages from the same sources were used for training and were
   labeled by an open model (Qwen3.8-27B).
-- **Evaluations on which Pusula 2.0 is below Pusula 1.0:** missing information 88.9 (Pusula 1.0: 96.0; 99 messages),
-  the benchmark 92.2 (92.6), long customer complaints 87.9 (88.1) and fraud 99.0 (100.0; one message). Per question,
-  the domain 82.8 (86.7), human handoff 87.1 (89.2) and legal risk 95.2 (95.6) are lower. Improvements in these areas
-  are planned for v2.1.
-- **Missing information:** this question was not part of the v1.0 training; Pusula 1.0 therefore answers it with the
-  general ability of the base model, which scores 98.0 on this set. On the gold test set, the same question is answered
-  more accurately by Pusula 2.0 (90.8) than by Pusula 1.0 (76.3) and Decision 3.0 (71.5).
-- **Custom questions:** questions that are not among the built-in templates are answered by the base Decision 3.0
-  model with the adapter disabled (`PUSULA_OWN_BASE`, on by default), and built-in templates in the same request are
-  answered with the adapter. On custom questions in unseen sectors, Pusula 2.0 reaches 93.5 (Decision 3.0: 92.8;
-  Pusula 1.0: 91.2); on MASSIVE and OffensEval, its scores are at the level of Decision 3.0.
-- **Pusula Nano 2.0** was trained for one epoch, with licensed real customer messages added to its training data. It
-  scores above Nano 1.0 on 15 of the 17 evaluations and below it on MASSIVE 26.9 (Nano 1.0: 36.4) and missing
-  information 50.5 (58.6). Nano 1.0 was trained before the 20 templates were introduced, which explains its lower
-  scores on the sets that contain them. For tasks that differ from the built-in questions, or that have many options,
-  Pusula is recommended (MASSIVE 85.2 vs 26.9).
+- **Where Pusula 2.0 is below Pusula 1.0:** on the benchmark, 92.0 (Pusula 1.0: 92.6), mainly in urgency, human
+  handoff and domain. Per question on the gold test set, the domain, human
+  handoff and missing information are lower (see the table above). Improvements in these areas are planned for v2.1.
+- **Custom questions and missing information:** questions that are not among the built-in templates, and the
+  missing-information template (`eksik_bilgi`), are answered by the base Decision 3.0 model with the adapter disabled
+  (`PUSULA_OWN_BASE`, on by default); the other built-in templates are answered with the adapter. On custom questions
+  in unseen sectors, Pusula 2.0 reaches 93.5 (Decision 3.0: 92.8; Pusula 1.0: 91.2), and on MASSIVE and OffensEval
+  its scores are at the level of Decision 3.0. On the missing-information set, the base model scores 98.0 (Pusula 1.0:
+  96.0); on realistic messages, the v2.0 adapter answers this question more accurately (gold test set 91.3 vs 70.9;
+  real customer messages 95.4 vs 74.2), and `PUSULA_OWN_BASE=0` uses the adapter for every question.
+- **Pusula Nano 2.0** was trained with licensed real customer messages added to its training data, and with the
+  examples of missing information weighted more heavily. It scores above Nano 1.0 on 14 of the 17 evaluations, equal on long customer complaints and below it on missing information 53.5 (Nano 1.0: 58.6) and MASSIVE 32.7 (Nano 1.0: 36.4). Nano 1.0 was trained before the 20 templates were
+  introduced, which explains its lower scores on the sets that contain them. For tasks that differ from the built-in
+  questions, or that have many options, Pusula is recommended (MASSIVE 85.2 vs 32.7).
 - MASSIVE and OffensEval are not included in the training data.
 
 ## Contents
@@ -289,7 +287,7 @@ Invalid questions are rejected with HTTP 422 and the reason. The server is confi
 | `PUSULA_D3_BASE` | — | Base `vllm-sr/d3` directory; required for Pusula (`PUSULA_MODEL_DIR` then points to the adapter) |
 | `PUSULA_MODEL_DIR` | — | Pusula adapter directory, or a Pusula Nano model directory |
 | `PUSULA_DEVICE` | auto | `cuda`, `cuda:1`, `cpu`… |
-| `PUSULA_OWN_BASE` | 1 | Pusula only: custom questions (not built-in) are answered by base Decision 3.0 with the adapter disabled; `0` uses the adapter for every question |
+| `PUSULA_OWN_BASE` | 1 | Pusula only: custom questions (not built-in) and the `eksik_bilgi` template are answered by base Decision 3.0 with the adapter disabled; `0` uses the adapter for every question |
 | `PUSULA_CORS_ORIGINS` | none | Comma-separated allowed origins for browser clients |
 | `PUSULA_MAX_QUESTIONS` | 32 | Questions per request |
 | `PUSULA_MAX_BATCH` | 64 | Requests per batch call |
@@ -499,7 +497,7 @@ Each release is tagged in this repository and in both Hugging Face repositories.
 
 | Version | Date | Real customer messages (Pusula / Nano) | Notes |
 |---|---|---|---|
-| `v2.0` | 31 October 2026 | 91.8 / 88.9 | Current release. 20 templates, routing through an institution's own list and custom questions answered by the base model; new synthetic training data across NACE Rev. 2.1 sectors and ESCO occupations; Pusula Nano trained with licensed real messages. The evaluation sets were extended, so the scores are not comparable with earlier rows. |
+| `v2.0` | 31 October 2026 | 90.6 / 89.9 | Current release. 20 templates, routing through an institution's own list and custom questions answered by the base model; new synthetic training data across NACE Rev. 2.1 sectors and ESCO occupations; Pusula Nano trained with licensed real messages. The evaluation sets were extended, so the scores are not comparable with earlier rows. |
 | `v1.0` | 18 October 2026 | 85.6 / 84.7 | Additional licensed training data (long customer complaints) and a second held-out real evaluation set. |
 | `v1.0-onizleme` | 17 October 2026 | 84.1 / 82.9 | Preview release. |
 

@@ -38,8 +38,8 @@ geliştirilmiştir ve Türkçedeki doğrulukları sınırlıdır. **Pusula, Tür
 
 | Model | Boyut | Çalıştığı yer | Benchmark / altın set | Ne için |
 |---|---|---|---|---|
-| **Pusula** (Türkçe Decision 3.0) | 26B: `vllm-sr/d3` üzerine 0,9 GB'lık LoRA adaptörü | GPU: BF16'da ≥ 64 GB, 4-bit'te ≥ 24 GB | **92,2 / 93,1** | En yüksek doğruluk; hazır ve özel sorular için |
-| **Pusula Nano** | 149M ([TabiBERT](https://huggingface.co/boun-tabilab/TabiBERT) cross-encoder) | CPU veya herhangi bir GPU | 83,3 / 91,3 | Hazır sorularda yüksek hacim ve düşük gecikme |
+| **Pusula** (Türkçe Decision 3.0) | 26B: `vllm-sr/d3` üzerine 0,9 GB'lık LoRA adaptörü | GPU: BF16'da ≥ 64 GB, 4-bit'te ≥ 24 GB | **92,0 / 92,1** | En yüksek doğruluk; hazır ve özel sorular için |
+| **Pusula Nano** | 149M ([TabiBERT](https://huggingface.co/boun-tabilab/TabiBERT) cross-encoder) | CPU veya herhangi bir GPU | 83,2 / 91,3 | Hazır sorularda yüksek hacim ve düşük gecikme |
 
 Her iki model de aynı istekleri kabul eder.
 
@@ -59,64 +59,63 @@ yayımlananlardan farklıdır. Decision 3.0 ile Pusula 1.0'ın MASSIVE ve Offens
 
 | Değerlendirme | Soru | Decision 3.0 | Pusula 1.0 | **Pusula 2.0** | Pusula Nano 1.0 | **Pusula Nano 2.0** |
 |---|---:|---:|---:|---:|---:|---:|
-| Gerçek müşteri mesajları (500, eğitim dışı, lisanslı) | 7.500 | 84,0 | 88,5 | **91,8** | 64,0 | **88,9** |
-| Uzun müşteri şikâyetleri (500, eğitim dışı, lisanslı) | 4.500 | 81,5 | 88,1 | **87,9** | 84,6 | **85,2** |
-| [Türkçe Karar Benchmark'ı](benchmark/README.md) (2.194 mesaj) | 19.861 | 88,5 | 92,6 | **92,2** | 82,7 | **83,3** |
-| Altın test seti (757 eğitim dışı mesaj) | 11.355 | 86,3 | 90,5 | **93,1** | 62,8 | **91,3** |
-| Görülmemiş sektörlerde kullanıcıya özel sorular | 400 | 92,8 | 91,2 | **93,5** | 50,5 | **53,2** |
-| Eksik bilgi (`eksik_bilgi`) | 99 | 98,0 | 96,0 | **88,9** | 58,6 | **50,5** |
-| Satış fırsatı (`satis_firsati`) | 100 | 97,0 | 97,0 | **97,0** | 51,0 | **94,0** |
-| Can güvenliği (`can_guvenligi`) | 120 | 100,0 | 100,0 | **100,0** | 81,7 | **85,0** |
-| Hakaret ve nefret söylemi (`hakaret`) | 114 | 93,0 | 93,0 | **97,4** | 43,9 | **71,0** |
-| Dolandırıcılık (`dolandiricilik`) | 97 | 99,0 | 100,0 | **99,0** | 51,5 | **66,0** |
-| Ajan cevabının kaynağa dayanması (`kaynaga_dayanma`) | 100 | 93,0 | 93,0 | **97,0** | 30,0 | **34,0** |
-| Yapay zekâ ajanı soruları (şablon 17-20) | 300 | 96,8 | 97,5 | **97,5** | 51,2 | **65,5** |
-| E-postalarda kişisel veri | 150 | 95,3 | 98,7 | **99,3** | 71,3 | **89,3** |
-| Belgelere gizlenmiş komutlar | 400 | 100,0 | 100,0 | **100,0** | 73,8 | **78,0** |
-| Uzun belgeler (yaklaşık 12.000 karakter) | 120 | 100,0 | 100,0 | **100,0** | 46,7 | **60,0** |
-| MASSIVE tr-TR, 60 niyet, sıfır örnekle (insan yazımı) | 2.974 | 85,3 | 85,2 | **85,2** | 36,4 | **26,9** |
-| OffensEval 2020 Türkçe, saldırgan dil (gerçek tweetler) | 3.528 | 88,4 | 88,3 | **88,3** | 30,6 | **80,9** |
+| Gerçek müşteri mesajları (500, eğitim dışı, lisanslı) | 7.500 | 84,0 | 88,5 | **90,6** | 64,0 | **89,9** |
+| Uzun müşteri şikâyetleri (500, eğitim dışı, lisanslı) | 4.500 | 81,5 | 88,1 | **88,3** | 84,6 | **84,6** |
+| [Türkçe Karar Benchmark'ı](benchmark/README.md) (2.194 mesaj) | 19.861 | 88,5 | 92,6 | **92,0** | 82,7 | **83,2** |
+| Altın test seti (757 eğitim dışı mesaj) | 11.355 | 86,3 | 90,5 | **92,1** | 62,8 | **91,3** |
+| Görülmemiş sektörlerde kullanıcıya özel sorular | 400 | 92,8 | 91,2 | **93,5** | 50,5 | **55,5** |
+| Eksik bilgi (`eksik_bilgi`) | 99 | 98,0 | 96,0 | **98,0** | 58,6 | **53,5** |
+| Satış fırsatı (`satis_firsati`) | 100 | 97,0 | 97,0 | **97,0** | 51,0 | **95,0** |
+| Can güvenliği (`can_guvenligi`) | 120 | 100,0 | 100,0 | **100,0** | 81,7 | **89,2** |
+| Hakaret ve nefret söylemi (`hakaret`) | 114 | 93,0 | 93,0 | **95,6** | 43,9 | **71,0** |
+| Dolandırıcılık (`dolandiricilik`) | 97 | 99,0 | 100,0 | **100,0** | 51,5 | **69,1** |
+| Ajan cevabının kaynağa dayanması (`kaynaga_dayanma`) | 100 | 93,0 | 93,0 | **98,0** | 30,0 | **38,0** |
+| Yapay zekâ ajanı soruları (şablon 17-20) | 300 | 96,8 | 97,5 | **97,8** | 51,2 | **68,2** |
+| E-postalarda kişisel veri | 150 | 95,3 | 98,7 | **100,0** | 71,3 | **93,3** |
+| Belgelere gizlenmiş komutlar | 400 | 100,0 | 100,0 | **100,0** | 73,8 | **78,2** |
+| Uzun belgeler (yaklaşık 12.000 karakter) | 120 | 100,0 | 100,0 | **100,0** | 46,7 | **50,8** |
+| MASSIVE tr-TR, 60 niyet, sıfır örnekle (insan yazımı) | 2.974 | 85,3 | 85,2 | **85,2** | 36,4 | **32,7** |
+| OffensEval 2020 Türkçe, saldırgan dil (gerçek tweetler) | 3.528 | 88,4 | 88,3 | **88,3** | 30,6 | **81,8** |
 
 Altın test seti, soru bazında:
 
 | Soru | Decision 3.0 | Pusula 1.0 | Pusula 2.0 |
 |---|---:|---:|---:|
-| Alan | 82,0 | **86,7** | 82,8 |
-| Mesaj türü | 69,0 | 79,9 | **93,4** |
-| Aciliyet (4 düzey) | 53,1 | 78,7 | **82,8** |
-| Duygu | 89,2 | 88,5 | **92,7** |
-| Eksik bilgi | 71,5 | 76,3 | **90,8** |
-| Eylem gerekli | 88,6 | 90,5 | **91,8** |
-| İnsana devret | 81,4 | **89,2** | 87,1 |
-| Kişisel veri | 96,4 | 96,2 | **96,7** |
-| Güvenlik riski | 95,6 | 98,7 | **99,2** |
+| Alan | 82,0 | **86,7** | 83,0 |
+| Mesaj türü | 69,0 | 79,9 | **93,3** |
+| Aciliyet (4 düzey) | 53,1 | 78,7 | **84,0** |
+| Duygu | 89,2 | 88,5 | **93,9** |
+| Eksik bilgi | 71,5 | **76,3** | 70,9 |
+| Eylem gerekli | 88,6 | 90,5 | **92,1** |
+| İnsana devret | 81,4 | **89,2** | 87,6 |
+| Kişisel veri | **96,4** | 96,2 | **96,4** |
+| Güvenlik riski | 95,6 | 98,7 | **99,1** |
 | Hakaret ve nefret söylemi | 99,2 | **100,0** | **100,0** |
 | Dolandırıcılık | 92,1 | 94,6 | **98,8** |
 | Can güvenliği | 98,0 | 98,3 | **99,1** |
-| Yasal risk | 95,5 | **95,6** | 95,2 |
-| Ayrılma riski | 85,7 | 87,6 | **88,9** |
-| Satış fırsatı | 97,2 | 96,7 | **97,9** |
+| Yasal risk | 95,5 | 95,6 | **95,9** |
+| Ayrılma riski | 85,7 | 87,6 | **89,3** |
+| Satış fırsatı | 97,2 | 96,7 | **97,5** |
 
 - **Gerçek müşteri mesajları:** Değerlendirme, ticari bir iş ortağından lisanslanan ve eğitimde kullanılmayan
   500'er anonim mesajdan oluşan iki set üzerinde yapılmıştır: müşteri mesajları (yorum, şikâyet ve soru) ile uzun ve
   ayrıntılı müşteri şikâyetleri. Bu setler yayımlanmamaktadır. Aynı kaynaklardan alınan diğer mesajlar eğitimde
   kullanılmış ve açık bir model (Qwen3.8-27B) tarafından etiketlenmiştir.
-- **Pusula 2.0'ın Pusula 1.0'ın gerisinde kaldığı ölçümler:** eksik bilgi 88,9 (Pusula 1.0: 96,0; 99 mesaj),
-  benchmark 92,2 (92,6), uzun müşteri şikâyetleri 87,9 (88,1) ve dolandırıcılık 99,0 (100,0; tek mesaj). Soru
-  bazında alan 82,8 (86,7), insana devretme 87,1 (89,2) ve yasal risk 95,2 (95,6) daha düşüktür. Bu alanlardaki
-  iyileştirmeler v2.1 için planlanmaktadır.
-- **Eksik bilgi:** Bu soru v1.0 eğitiminde yer almadığından Pusula 1.0 bu soruyu temel modelin genel yeteneğiyle
-  cevaplamaktadır; temel model bu sette 98,0 almaktadır. Altın test setinde ise aynı soru Pusula 2.0 tarafından daha
-  doğru cevaplanmaktadır (90,8; Pusula 1.0: 76,3; Decision 3.0: 71,5).
-- **Özel sorular:** Hazır şablonlar arasında yer almayan sorular, adaptör kapatılarak temel Decision 3.0 modeli
-  tarafından cevaplanmakta (`PUSULA_OWN_BASE`, varsayılan olarak açık), aynı istekteki hazır şablonlar ise adaptörle
-  cevaplanmaktadır. Görülmemiş sektörlerdeki özel sorularda Pusula 2.0 93,5'e ulaşmaktadır (Decision 3.0: 92,8;
-  Pusula 1.0: 91,2); MASSIVE ve OffensEval'deki puanları Decision 3.0 düzeyindedir.
-- **Pusula Nano 2.0**, eğitim verisine lisanslı gerçek müşteri mesajları eklenerek bir tur (epoch) eğitilmiştir.
-  17 ölçümün 15'inde Nano 1.0'ın üzerinde, MASSIVE 26,9 (Nano 1.0: 36,4) ve eksik bilgi 50,5 (58,6) ölçümlerinde
-  ise gerisindedir. Nano 1.0, 20 şablon tanıtılmadan önce eğitildiğinden bu şablonları içeren setlerde daha düşük
-  puan almaktadır. Hazır sorulardan farklı ya da çok seçenekli görevler için Pusula önerilmektedir (MASSIVE'de
-  85,2'ye 26,9).
+- **Pusula 2.0'ın Pusula 1.0'ın gerisinde kaldığı ölçüm:** benchmark 92,0 (Pusula 1.0: 92,6); fark
+  büyük ölçüde aciliyet, insana devretme ve alan sorularından gelmektedir.
+  Altın test setinde soru bazında alan, insana devretme ve eksik bilgi daha düşüktür (yukarıdaki tablo). Bu
+  alanlardaki iyileştirmeler v2.1 için planlanmaktadır.
+- **Özel sorular ve eksik bilgi:** Hazır şablonlar arasında yer almayan sorular ile eksik bilgi şablonu
+  (`eksik_bilgi`), adaptör kapatılarak temel Decision 3.0 modeli tarafından cevaplanmakta (`PUSULA_OWN_BASE`,
+  varsayılan olarak açık), öteki hazır şablonlar ise adaptörle cevaplanmaktadır. Görülmemiş sektörlerdeki özel
+  sorularda Pusula 2.0 93,5'e ulaşmakta (Decision 3.0: 92,8; Pusula 1.0: 91,2), MASSIVE ve OffensEval'deki puanları
+  Decision 3.0 düzeyinde kalmaktadır. Eksik bilgi setinde temel model 98,0 almaktadır (Pusula 1.0: 96,0); gerçekçi
+  mesajlarda ise bu soru v2.0 adaptörüyle daha doğru cevaplanmaktadır (altın test setinde 70,9'a karşı 91,3; gerçek
+  müşteri mesajlarında 74,2'ye karşı 95,4). `PUSULA_OWN_BASE=0` her soruda adaptörü kullanır.
+- **Pusula Nano 2.0**, eğitim verisine lisanslı gerçek müşteri mesajları eklenerek ve eksik bilgi örneklerine daha
+  yüksek ağırlık verilerek eğitilmiştir. 17 ölçümün 14'ünde Nano 1.0'ın üzerinde, uzun müşteri şikâyetleri ölçümünde eşit, eksik bilgi 53,5 (Nano 1.0: 58,6) ve MASSIVE 32,7 (Nano 1.0: 36,4) ölçümlerinde ise gerisindedir. Nano 1.0, 20 şablon tanıtılmadan önce eğitildiğinden bu şablonları
+  içeren setlerde daha düşük puan almaktadır. Hazır sorulardan farklı ya da çok seçenekli görevler için Pusula
+  önerilmektedir (MASSIVE'de 85,2'ye 32,7).
 - MASSIVE ve OffensEval eğitim verisinde yer almamaktadır.
 
 ## İçindekiler
@@ -290,7 +289,7 @@ Geçersiz sorular HTTP 422 ve gerekçesiyle reddedilir. Sunucu, ortam değişken
 | `PUSULA_D3_BASE` | — | Temel `vllm-sr/d3` dizini; Pusula için gereklidir (bu durumda `PUSULA_MODEL_DIR` adaptörü gösterir) |
 | `PUSULA_MODEL_DIR` | — | Pusula adaptör dizini ya da Pusula Nano model dizini |
 | `PUSULA_DEVICE` | otomatik | `cuda`, `cuda:1`, `cpu`… |
-| `PUSULA_OWN_BASE` | 1 | Yalnız Pusula: hazır olmayan (kullanıcıya özel) sorular adaptör kapatılarak temel Decision 3.0 ile cevaplanır; `0` her soruda adaptörü kullanır |
+| `PUSULA_OWN_BASE` | 1 | Yalnız Pusula: hazır olmayan (kullanıcıya özel) sorular ve `eksik_bilgi` şablonu adaptör kapatılarak temel Decision 3.0 ile cevaplanır; `0` her soruda adaptörü kullanır |
 | `PUSULA_CORS_ORIGINS` | yok | Tarayıcı istemcileri için virgülle ayrılmış izinli origin'ler |
 | `PUSULA_MAX_QUESTIONS` | 32 | İstek başına soru sayısı |
 | `PUSULA_MAX_BATCH` | 64 | Toplu çağrıdaki istek sayısı |
@@ -500,7 +499,7 @@ Her sürüm bu depoda ve iki Hugging Face deposunda etiketlenmektedir. Önceki a
 
 | Sürüm | Tarih | Gerçek müşteri mesajları (Pusula / Nano) | Notlar |
 |---|---|---|---|
-| `v2.0` | 31 Ekim 2026 | 91,8 / 88,9 | Güncel sürüm. 20 şablon, kurumun kendi listesiyle yönlendirme ve temel modelle cevaplanan özel sorular; NACE Rev. 2.1 sektörleri ve ESCO meslekleri üzerinde yeni sentetik eğitim verisi; lisanslı gerçek mesajlarla eğitilen Pusula Nano. Değerlendirme setleri genişletildiğinden puanlar önceki satırlarla karşılaştırılamaz. |
+| `v2.0` | 31 Ekim 2026 | 90,6 / 89,9 | Güncel sürüm. 20 şablon, kurumun kendi listesiyle yönlendirme ve temel modelle cevaplanan özel sorular; NACE Rev. 2.1 sektörleri ve ESCO meslekleri üzerinde yeni sentetik eğitim verisi; lisanslı gerçek mesajlarla eğitilen Pusula Nano. Değerlendirme setleri genişletildiğinden puanlar önceki satırlarla karşılaştırılamaz. |
 | `v1.0` | 18 Ekim 2026 | 85,6 / 84,7 | Ek lisanslı eğitim verisi (uzun müşteri şikâyetleri) ve eğitim dışı ikinci bir gerçek ölçüm seti. |
 | `v1.0-onizleme` | 17 Ekim 2026 | 84,1 / 82,9 | Önizleme sürümü. |
 
