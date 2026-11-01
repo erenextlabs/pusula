@@ -30,7 +30,8 @@ PY
 # torch comes from the image (often a pre-release build such as 2.14.0a0+nv): torch-dependent packages are
 # installed with --no-deps so pip never tries to replace it; their other dependencies are listed explicitly.
 $PIP "transformers==5.17.0" "safetensors>=0.4" einops pyarrow "huggingface_hub>=1.0" pyyaml rich "pydantic>=2"   fastapi uvicorn openai ninja psutil tqdm packaging numpy
-$PIP --no-deps "peft>=0.13" "accelerate>=1.10" flash-linear-attention fla-core "bitsandbytes>=0.46.1"  # 4-bit d3 on GPUs < 80 GB
+# versions of the last verified GPU run (31 Oct 2026): a new release must not change a paid run
+$PIP --no-deps "peft==0.21.2" "accelerate==1.15.0" "flash-linear-attention==0.6.0" "fla-core==0.6.0" "bitsandbytes==0.50.2"  # 4-bit d3 on GPUs < 80 GB
 $PIP --no-deps -e .
 # optional status hook (e.g. a launcher marks "Python ready" so CPU or API work can start during the kernel build)
 if [[ -n ${AFTER_PIP:-} ]]; then bash -c "$AFTER_PIP" || echo "AFTER_PIP hook failed (ignored)" >&2; fi
@@ -42,7 +43,7 @@ fi
 if [ -x "/usr/local/cuda-$TCU/bin/nvcc" ]; then export CUDA_HOME="/usr/local/cuda-$TCU" PATH="/usr/local/cuda-$TCU/bin:$PATH"; fi
 # fast causal conv kernel for d3's Gated DeltaNet layers (otherwise a slow fallback is used)
 python -c "import causal_conv1d" 2>/dev/null || \
-  MAX_JOBS=${MAX_JOBS:-32} $PIP --no-deps --no-build-isolation "causal-conv1d>=1.5"
+  MAX_JOBS=${MAX_JOBS:-32} $PIP --no-deps --no-build-isolation "causal-conv1d==1.7.0"
 if [[ ${WITH_VLLM:-0} == 1 ]]; then $PIP vllm; fi  # brings its own torch: use a dedicated image/venv
 
 if [[ ${1:-} == models ]]; then
