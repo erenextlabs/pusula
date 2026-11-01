@@ -4,12 +4,12 @@
 
 ### The first full-featured Turkish decision model
 
-[English](README.md) • [Türkçe](README_TR.md) • [Website](https://hsnsahinhsn.github.io/pusula/en/)
+[English](README.md) • [Türkçe](README_TR.md) • [Website](https://erenextlabs.github.io/pusula/en/)
 
-[![CI](https://github.com/hsnsahinhsn/pusula/actions/workflows/ci.yml/badge.svg)](https://github.com/hsnsahinhsn/pusula/actions)
+[![CI](https://github.com/erenextlabs/pusula/actions/workflows/ci.yml/badge.svg)](https://github.com/erenextlabs/pusula/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://www.python.org/)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hsnsahinhsn/pusula/blob/main/examples/pusula_nano_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/erenextlabs/pusula/blob/main/examples/pusula_nano_colab.ipynb)
 
 </div>
 
@@ -138,7 +138,7 @@ Gold test set, per question:
 ## Installation
 
 ```bash
-pip install "pusula[serve,d3] @ git+https://github.com/hsnsahinhsn/pusula"
+pip install "pusula[serve,d3] @ git+https://github.com/erenextlabs/pusula"
 hf download vllm-sr/d3 --local-dir ~/d3 --exclude "assets/*"     # base Decision 3.0 weights (~52 GB)
 hf download hsnsahinhsn/pusula --local-dir ~/pusula                # Pusula adapter (~0.9 GB)
 # or the small model, which needs no base weights:
@@ -466,7 +466,7 @@ questions = {"alan": tax.domain_question(), "aciliyet": tax.universal["aciliyet"
 - [`examples/agentic_router.py`](examples/agentic_router.py): guardrail check, tool selection, approval and urgency
   for an agent, obtained in a single call.
 - [`examples/pusula_nano_colab.ipynb`](examples/pusula_nano_colab.ipynb): Pusula Nano on Google Colab (custom
-  questions, built-in routing and batch processing), which can be opened without installation: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hsnsahinhsn/pusula/blob/main/examples/pusula_nano_colab.ipynb)
+  questions, built-in routing and batch processing), which can be opened without installation: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/erenextlabs/pusula/blob/main/examples/pusula_nano_colab.ipynb)
 
 ## Training your own model
 
@@ -519,7 +519,7 @@ in [`CITATION.cff`](CITATION.cff) and through the "Cite this repository" button 
   author  = {Şahin, Hasan and Sayman, Ahmet},
   year    = {2026},
   version = {2.0},
-  url     = {https://github.com/hsnsahinhsn/pusula},
+  url     = {https://github.com/erenextlabs/pusula},
   license = {Apache-2.0}
 }
 ```
