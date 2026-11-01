@@ -4,12 +4,12 @@
 
 ### İlk Türkçe tam donanımlı karar modeli
 
-[English](README.md) • [Türkçe](README_TR.md) • [Web sitesi](https://hsnsahinhsn.github.io/pusula/tr/)
+[English](README.md) • [Türkçe](README_TR.md) • [Web sitesi](https://erenextlabs.github.io/pusula/tr/)
 
-[![CI](https://github.com/hsnsahinhsn/pusula/actions/workflows/ci.yml/badge.svg)](https://github.com/hsnsahinhsn/pusula/actions)
+[![CI](https://github.com/erenextlabs/pusula/actions/workflows/ci.yml/badge.svg)](https://github.com/erenextlabs/pusula/actions)
 [![Lisans: Apache 2.0](https://img.shields.io/badge/Lisans-Apache%202.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-green.svg)](https://www.python.org/)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hsnsahinhsn/pusula/blob/main/examples/pusula_nano_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/erenextlabs/pusula/blob/main/examples/pusula_nano_colab.ipynb)
 
 </div>
 
@@ -140,7 +140,7 @@ Altın test seti, soru bazında:
 ## Kurulum
 
 ```bash
-pip install "pusula[serve,d3] @ git+https://github.com/hsnsahinhsn/pusula"
+pip install "pusula[serve,d3] @ git+https://github.com/erenextlabs/pusula"
 hf download vllm-sr/d3 --local-dir ~/d3 --exclude "assets/*"     # temel Decision 3.0 ağırlıkları (~52 GB)
 hf download hsnsahinhsn/pusula --local-dir ~/pusula                # Pusula adaptörü (~0,9 GB)
 # ya da temel ağırlık gerektirmeyen küçük model:
@@ -468,7 +468,7 @@ sorular = {"alan": tax.domain_question(), "aciliyet": tax.universal["aciliyet"],
 - [`examples/agentic_router.py`](examples/agentic_router.py): Bir ajan için güvenlik denetimi, araç seçimi, onay ve
   aciliyet kararları tek çağrıda alınır.
 - [`examples/pusula_nano_colab.ipynb`](examples/pusula_nano_colab.ipynb): Pusula Nano'nun Google Colab üzerinde
-  kullanımı (özel sorular, hazır yönlendirme ve toplu işlem); defter kurulum gerektirmeden açılabilir: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hsnsahinhsn/pusula/blob/main/examples/pusula_nano_colab.ipynb)
+  kullanımı (özel sorular, hazır yönlendirme ve toplu işlem); defter kurulum gerektirmeden açılabilir: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/erenextlabs/pusula/blob/main/examples/pusula_nano_colab.ipynb)
 
 ## Kendi modelinizi eğitmek
 
@@ -521,7 +521,7 @@ Pusula'nın bir araştırmada veya üründe kullanılması durumunda aşağıdak
   author  = {Şahin, Hasan and Sayman, Ahmet},
   year    = {2026},
   version = {2.0},
-  url     = {https://github.com/hsnsahinhsn/pusula},
+  url     = {https://github.com/erenextlabs/pusula},
   license = {Apache-2.0}
 }
 ```
