@@ -198,6 +198,8 @@ def train(args) -> None:
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.token_budget is None:  # one 65,536-token batch needs about 100 GB in forward + backward on CPU (1.3-1.5 MB per token)
+        args.token_budget = 65536 if device.type == "cuda" else 2048
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -345,7 +347,7 @@ def main(argv=None) -> None:
     p.add_argument("--weight-decay", type=float, default=0.01)
     p.add_argument("--warmup", type=float, default=0.06)
     p.add_argument("--alpha", type=float, default=0.5, help="weight of the hard-label CE term")
-    p.add_argument("--token-budget", type=int, default=65536, help="padded tokens per batch")
+    p.add_argument("--token-budget", type=int, default=None, help="padded tokens per batch (default: 65536 on GPU, 2048 on CPU)")
     p.add_argument("--max-train-options", type=int, default=8)
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--seed", type=int, default=7)
