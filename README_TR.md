@@ -505,7 +505,7 @@ Her sürüm bu depoda ve iki Hugging Face deposunda etiketlenmektedir. Önceki a
 
 ## Katkıda bulunanlar ve atıf
 
-Pusula, Erenext LLC tarafından geliştirilmektedir. Katkıda bulunanlar aşağıda listelenmiştir:
+Pusula, Erenext's AI Lab tarafından geliştirilmektedir. Katkıda bulunanlar aşağıda listelenmiştir:
 
 | Ad | Rol | GitHub | Hugging Face |
 |---|---|---|---|
