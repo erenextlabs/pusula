@@ -4,6 +4,8 @@
 It is intended for measuring the performance of decision models (Decision 3.0, Pusula or others) on Turkish.
 The benchmark is also published on Hugging Face as [erenextlabs/turkish-decision-benchmark](https://huggingface.co/datasets/erenextlabs/turkish-decision-benchmark).
 
+The benchmark is developed by Erenext LLC.
+
 - **Coverage:** all 20 domains of the Pusula taxonomy and its 299 intents are represented; 12 writing styles are included (formal e-mails,
   everyday chat, no Turkish characters and typos, angry capitals, long and rambling, one short line, Turkish–English
   code-switching, an elderly user's roundabout politeness, young and emoji-heavy, several issues with the real request
