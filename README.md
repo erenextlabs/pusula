@@ -503,7 +503,7 @@ Each release is tagged in this repository and in both Hugging Face repositories.
 
 ## Contributors and citation
 
-Pusula is developed by the following contributors:
+Pusula is developed by Erenext LLC. The contributors are listed below:
 
 | Name | Role | GitHub | Hugging Face |
 |---|---|---|---|
