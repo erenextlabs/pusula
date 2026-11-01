@@ -51,7 +51,7 @@
   <div class="cta">
     <a class="btn primary" href="#start">Get started</a>
     <a class="btn" href="https://github.com/erenextlabs/pusula">GitHub</a>
-    <a class="btn" href="https://huggingface.co/hsnsahinhsn/pusula">Hugging Face</a>
+    <a class="btn" href="https://huggingface.co/erenextlabs/pusula">Hugging Face</a>
   </div>
 
   <div class="tiles">
@@ -167,7 +167,7 @@
           <dt>Size</dt><dd>26B: a 0.9 GB LoRA adapter on top of <code>vllm-sr/d3</code></dd>
           <dt>Runs on</dt><dd>GPU: ≥ 64 GB in BF16, ≥ 24 GB in 4-bit</dd>
           <dt>Benchmark / gold</dt><dd>92.0 / 92.1</dd>
-          <dt>Weights</dt><dd><a href="https://huggingface.co/hsnsahinhsn/pusula">hsnsahinhsn/pusula</a></dd>
+          <dt>Weights</dt><dd><a href="https://huggingface.co/erenextlabs/pusula">erenextlabs/pusula</a></dd>
         </dl>
       </div>
       <div class="card">
@@ -178,7 +178,7 @@
           <dt>Size</dt><dd>149M (<a href="https://huggingface.co/boun-tabilab/TabiBERT">TabiBERT</a> cross-encoder)</dd>
           <dt>Runs on</dt><dd>CPU or any GPU</dd>
           <dt>Benchmark / gold</dt><dd>83.2 / 91.3</dd>
-          <dt>Weights</dt><dd><a href="https://huggingface.co/hsnsahinhsn/pusula-nano">hsnsahinhsn/pusula-nano</a></dd>
+          <dt>Weights</dt><dd><a href="https://huggingface.co/erenextlabs/pusula-nano">erenextlabs/pusula-nano</a></dd>
         </dl>
       </div>
     </div>
@@ -280,9 +280,9 @@
       <p class="code-title">Installation</p>
 <pre><code>pip install "pusula[serve,d3] @ git+https://github.com/erenextlabs/pusula"
 hf download vllm-sr/d3 --local-dir ~/d3 --exclude "assets/*"     # base Decision 3.0 weights (~52 GB)
-hf download hsnsahinhsn/pusula --local-dir ~/pusula                # Pusula adapter (~0.9 GB)
+hf download erenextlabs/pusula --local-dir ~/pusula                # Pusula adapter (~0.9 GB)
 # or the small model, which needs no base weights:
-hf download hsnsahinhsn/pusula-nano --local-dir ~/pusula-nano      # Pusula Nano (~0.6 GB)</code></pre>
+hf download erenextlabs/pusula-nano --local-dir ~/pusula-nano      # Pusula Nano (~0.6 GB)</code></pre>
     </div>
     <div>
       <p class="code-title">Python</p>
@@ -344,7 +344,7 @@ print(answers["niyet"]["choice"], answers["niyet"]["confidence"])</code></pre>
 <footer>
   <div class="wrap">
     <span>© 2026 Hasan Şahin · Contributor: <a href="https://github.com/asayman">Ahmet Sayman</a> · Apache 2.0</span>
-    <span><a href="https://github.com/erenextlabs/pusula">GitHub</a> · <a href="https://huggingface.co/hsnsahinhsn/pusula">Pusula</a> · <a href="https://huggingface.co/hsnsahinhsn/pusula-nano">Pusula Nano</a> · <a href="https://github.com/erenextlabs/pusula/blob/main/NOTICE">NOTICE</a></span>
+    <span><a href="https://github.com/erenextlabs/pusula">GitHub</a> · <a href="https://huggingface.co/erenextlabs/pusula">Pusula</a> · <a href="https://huggingface.co/erenextlabs/pusula-nano">Pusula Nano</a> · <a href="https://github.com/erenextlabs/pusula/blob/main/NOTICE">NOTICE</a></span>
   </div>
 </footer>
 </body>

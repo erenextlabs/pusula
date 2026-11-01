@@ -29,10 +29,10 @@ accuracy on Turkish is limited. **Pusula is Decision 3.0 adapted to Turkish.**
   institution's own topic list is also supported.
 - **Turkish decision benchmark.** Pusula has been evaluated against the base Decision 3.0 model on independently
   labeled Turkish test sets; the results are published with the model. The benchmark is available on
-  [Hugging Face](https://huggingface.co/datasets/hsnsahinhsn/turkish-decision-benchmark).
+  [Hugging Face](https://huggingface.co/datasets/erenextlabs/turkish-decision-benchmark).
 
-> **Status:** v2.0 (31 October 2026). Weights: [Pusula](https://huggingface.co/hsnsahinhsn/pusula) ·
-> [Pusula Nano](https://huggingface.co/hsnsahinhsn/pusula-nano). Earlier versions are listed under [Releases](#releases).
+> **Status:** v2.0 (31 October 2026). Weights: [Pusula](https://huggingface.co/erenextlabs/pusula) ·
+> [Pusula Nano](https://huggingface.co/erenextlabs/pusula-nano). Earlier versions are listed under [Releases](#releases).
 
 ## Models
 
@@ -140,9 +140,9 @@ Gold test set, per question:
 ```bash
 pip install "pusula[serve,d3] @ git+https://github.com/erenextlabs/pusula"
 hf download vllm-sr/d3 --local-dir ~/d3 --exclude "assets/*"     # base Decision 3.0 weights (~52 GB)
-hf download hsnsahinhsn/pusula --local-dir ~/pusula                # Pusula adapter (~0.9 GB)
+hf download erenextlabs/pusula --local-dir ~/pusula                # Pusula adapter (~0.9 GB)
 # or the small model, which needs no base weights:
-hf download hsnsahinhsn/pusula-nano --local-dir ~/pusula-nano      # Pusula Nano (~0.6 GB)
+hf download erenextlabs/pusula-nano --local-dir ~/pusula-nano      # Pusula Nano (~0.6 GB)
 ```
 
 The `serve` extra installs PyTorch, Transformers and FastAPI; the `d3` extra adds PEFT and bitsandbytes for 4-bit
@@ -493,7 +493,7 @@ models do not permit training competing models on their outputs.
 ## Releases
 
 Each release is tagged in this repository and in both Hugging Face repositories. Earlier weights are obtained with
-`hf download hsnsahinhsn/pusula --revision <tag>`.
+`hf download erenextlabs/pusula --revision <tag>`.
 
 | Version | Date | Real customer messages (Pusula / Nano) | Notes |
 |---|---|---|---|

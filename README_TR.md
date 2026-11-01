@@ -29,10 +29,10 @@ geliştirilmiştir ve Türkçedeki doğrulukları sınırlıdır. **Pusula, Tür
   yönlendirme de desteklenmektedir.
 - **Türkçe karar benchmark'ı.** Pusula, bağımsız olarak etiketlenmiş Türkçe test setlerinde ham Decision 3.0 ile
   karşılaştırılmıştır; sonuçlar modelle birlikte yayımlanmaktadır. Benchmark,
-  [Hugging Face](https://huggingface.co/datasets/hsnsahinhsn/turkish-decision-benchmark) üzerinde de sunulmaktadır.
+  [Hugging Face](https://huggingface.co/datasets/erenextlabs/turkish-decision-benchmark) üzerinde de sunulmaktadır.
 
-> **Durum:** v2.0 (31 Ekim 2026). Ağırlıklar: [Pusula](https://huggingface.co/hsnsahinhsn/pusula) ·
-> [Pusula Nano](https://huggingface.co/hsnsahinhsn/pusula-nano). Önceki sürümler [Sürümler](#sürümler) bölümünde listelenmektedir.
+> **Durum:** v2.0 (31 Ekim 2026). Ağırlıklar: [Pusula](https://huggingface.co/erenextlabs/pusula) ·
+> [Pusula Nano](https://huggingface.co/erenextlabs/pusula-nano). Önceki sürümler [Sürümler](#sürümler) bölümünde listelenmektedir.
 
 ## Modeller
 
@@ -142,9 +142,9 @@ Altın test seti, soru bazında:
 ```bash
 pip install "pusula[serve,d3] @ git+https://github.com/erenextlabs/pusula"
 hf download vllm-sr/d3 --local-dir ~/d3 --exclude "assets/*"     # temel Decision 3.0 ağırlıkları (~52 GB)
-hf download hsnsahinhsn/pusula --local-dir ~/pusula                # Pusula adaptörü (~0,9 GB)
+hf download erenextlabs/pusula --local-dir ~/pusula                # Pusula adaptörü (~0,9 GB)
 # ya da temel ağırlık gerektirmeyen küçük model:
-hf download hsnsahinhsn/pusula-nano --local-dir ~/pusula-nano      # Pusula Nano (~0,6 GB)
+hf download erenextlabs/pusula-nano --local-dir ~/pusula-nano      # Pusula Nano (~0,6 GB)
 ```
 
 `serve` eki PyTorch, Transformers ve FastAPI'yi; `d3` eki ise 4-bit yükleme için PEFT ve bitsandbytes'ı kurar.
@@ -495,7 +495,7 @@ vermediğinden bu etiketler yalnızca değerlendirme amacıyla kullanılmalıdı
 ## Sürümler
 
 Her sürüm bu depoda ve iki Hugging Face deposunda etiketlenmektedir. Önceki ağırlıklar
-`hf download hsnsahinhsn/pusula --revision <etiket>` komutuyla indirilir.
+`hf download erenextlabs/pusula --revision <etiket>` komutuyla indirilir.
 
 | Sürüm | Tarih | Gerçek müşteri mesajları (Pusula / Nano) | Notlar |
 |---|---|---|---|
