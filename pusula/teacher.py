@@ -31,10 +31,10 @@ def label_chunk(decider, examples: list[Example], token_budget: int, source: str
     `questions` when given (the others keep their labels and soft targets)."""
     import torch
 
-    from .d3model import render
+    from .d3model import prompt_for
 
     jobs = [(ex, name, q) for ex in examples for name, q in ex.questions.items() if questions is None or name in questions]
-    ids = decider.encode([render(decider.tokenizer, ex.state, q, decider.codes) for ex, _, q in jobs])
+    ids = decider.encode([prompt_for(decider, ex.state, q) for ex, _, q in jobs])
     order = sorted(range(len(jobs)), key=lambda i: len(ids[i]))
     batch: list[int] = []
 

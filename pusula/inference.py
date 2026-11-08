@@ -232,11 +232,11 @@ class D3Engine(BaseEngine):
 
     @torch.inference_mode()
     def decide_many(self, requests: Sequence[tuple[str, QuestionsIn]]) -> list[dict[str, dict[str, Any]]]:
-        from .d3model import render
+        from .d3model import prompt_for
 
         jobs = [(r, name, q) for r, (state, qs) in enumerate(requests) for name, q in _as_questions(qs).items()]
         d = self.decider
-        ids = d.encode([render(d.tokenizer, requests[r][0], q, d.codes) for r, _, q in jobs])
+        ids = d.encode([prompt_for(d, requests[r][0], q) for r, _, q in jobs])
         results: list[dict[str, dict[str, Any]]] = [{} for _ in requests]
         use_base = [self._use_base(name, q) for _, name, q in jobs]
         with self._lock:

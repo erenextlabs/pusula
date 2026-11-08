@@ -98,7 +98,7 @@ def _balance(a) -> bool | frozenset:
 def build_items(examples: list[Example], decider, label_source: str, rng: Optional[random.Random],
                 max_prompts: int = 0, weights: Optional[dict[str, float]] = None,
                 class_balance: bool | frozenset = False) -> list[Item]:
-    from .d3model import render, shuffled_order
+    from .d3model import prompt_for, shuffled_order
 
     pairs = [(ex, name) for ex in examples for name in ex.labels.get(label_source, {})]
     if not pairs:
@@ -129,7 +129,7 @@ def build_items(examples: list[Example], decider, label_source: str, rng: Option
         order = shuffled_order(q, rng) if rng is not None else None
         label = q.option_keys().index(ex.labels[label_source][name])
         shown = order.index(label) if order is not None else label
-        prompts.append(render(decider.tokenizer, ex.state, q, decider.codes, order))
+        prompts.append(prompt_for(decider, ex.state, q, order))
         soft = ex.teacher.get(name)
         if soft is not None and order is not None:
             soft = [soft[i] for i in order]
@@ -228,13 +228,18 @@ class TokenizerDecider:
     def __init__(self, model_dir: str):
         from transformers import AutoTokenizer
 
-        from .d3model import load_codes
+        from .d3model import PREFIX_BIDIR, load_format
 
+        fmt = load_format(model_dir)
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
-        self.codes = load_codes(model_dir)
+        self.codes = fmt.codes
+        self.layout = fmt.layout
+        self.blocked = fmt.attention_mode == PREFIX_BIDIR
 
     def encode(self, prompts):
-        return self.tokenizer(list(prompts), add_special_tokens=False)["input_ids"]
+        from .d3model import encode_prompts
+
+        return encode_prompts(self.tokenizer, prompts, self.layout, self.blocked)
 
 
 def run_check(a) -> None:

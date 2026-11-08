@@ -29,14 +29,14 @@ FORMAT = "pusula-calibration-v1"
 def predict(d3: str, adapter: Optional[str], data: str, out: str, token_budget: int = 16384) -> int:
     import torch
 
-    from .d3model import D3Decider, render
+    from .d3model import D3Decider, prompt_for
 
     decider = D3Decider.load(d3, adapter=adapter, load_in_4bit=False)
     decider.backbone.eval()
     examples = read_examples(data)
     source = "gold" if any("gold" in ex.labels for ex in examples) else "final"
     jobs = [(ex, name) for ex in examples for name in ex.labels.get(source, {})]
-    ids = decider.encode([render(decider.tokenizer, ex.state, ex.questions[n], decider.codes) for ex, n in jobs])
+    ids = decider.encode([prompt_for(decider, ex.state, ex.questions[n]) for ex, n in jobs])
     order = sorted(range(len(jobs)), key=lambda i: len(ids[i]))
     rows: list[dict] = [None] * len(jobs)  # type: ignore[list-item]
     batch: list[int] = []
