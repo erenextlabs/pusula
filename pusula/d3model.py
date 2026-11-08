@@ -175,6 +175,9 @@ class ModelFormat:
     temperature: float  # code logits of the base model are divided by this before the softmax
 
 
+HUB_BASE = {NONCAUSAL: "vllm-sr/d3", PREFIX_BIDIR: "vllm-sr/d3-ultra"}   # the public base of each attention mode
+
+
 def load_format(model_dir: str | Path) -> ModelFormat:
     cfg = json.loads((Path(model_dir) / "decision_config.json").read_text(encoding="utf-8"))
     if cfg.get("format_id") != "d3-code-readout-v1":
@@ -402,6 +405,8 @@ class D3Decider:
             backbone = get_peft_model(backbone, LoraConfig(
                 r=lora_rank, lora_alpha=2 * lora_rank, lora_dropout=0.05, target_modules=LORA_TARGETS,
                 bias="none", task_type="FEATURE_EXTRACTION"))  # a string the Hub can parse; same logits as None
+            # a saved adapter names its public base, not the local folder it was trained from
+            backbone.peft_config["default"].base_model_name_or_path = HUB_BASE[fmt.attention_mode]
         if not trainable:  # base weights never train; only LoRA layers and the readout do
             for param in backbone.parameters():
                 param.requires_grad_(False)

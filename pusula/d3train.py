@@ -337,6 +337,37 @@ def _fresh(path: Path) -> Path:
     return path
 
 
+def params_digest(params) -> int:
+    """63-bit digest of the exact values of `params` (fp32 view, so bf16 and fp32 hash the same way)."""
+    import hashlib
+
+    import torch
+
+    h = hashlib.sha256()
+    with torch.no_grad():
+        for p in params:
+            h.update(p.detach().to(dtype=torch.float32, device="cpu").numpy().tobytes())
+    return int.from_bytes(h.digest()[:8], "big") >> 1
+
+
+def sync_params(dist, params) -> None:
+    """Every rank takes rank 0's values. A fresh LoRA starts from random weights that differ per process, and the
+    optimizer only all-reduces gradients: without this each GPU would train a different model."""
+    for p in params:
+        dist.broadcast(p.data, src=0)
+
+
+def params_in_sync(dist, params, device) -> bool:
+    """True when all ranks hold bit-identical trainable values."""
+    import torch
+
+    lo = torch.tensor([params_digest(params)], dtype=torch.long, device=device)
+    hi = lo.clone()
+    dist.all_reduce(lo, op=dist.ReduceOp.MIN)
+    dist.all_reduce(hi, op=dist.ReduceOp.MAX)
+    return lo.item() == hi.item()
+
+
 def train(a) -> None:
     """Single- or multi-GPU (torchrun --nproc-per-node N): every GPU holds a full d3 copy, each optimizer
     step's micro-batches are split across GPUs and the LoRA/readout gradients are averaged."""
@@ -364,6 +395,8 @@ def train(a) -> None:
     decider = D3Decider.load(a.d3, adapter=start, lora_rank=a.lora_rank,
                              gradient_checkpointing=not a.no_grad_ckpt, load_in_4bit=_precision(a), device=device)
     decider.readout.requires_grad_(True)
+    if world > 1:  # a resumed or --init-adapter run loads the same values on every rank; a fresh LoRA does not
+        sync_params(dist, [p for p in decider.backbone.parameters() if p.requires_grad] + [decider.readout])
     rng = random.Random(a.seed)
     t0 = time.time()
     weights = {name: a.focus_weight for name in a.focus.split(",") if name} if a.focus else None
@@ -384,12 +417,17 @@ def train(a) -> None:
     step, best = 0, -1.0
     if resume:
         state = json.loads((last / "trainer_state.json").read_text())
+        saved = (state.get("token_budget", a.token_budget), state.get("accum", a.accum))
+        if saved != (a.token_budget, a.accum):  # the step counter is an index into a schedule these two values define
+            raise SystemExit(f"{last}: kayıt token bütçesi/accum {saved} ile yazıldı, bu çalıştırma {(a.token_budget, a.accum)}")
         step, best = state["step"], state.get("best", -1.0)
         opt.load_state_dict(torch.load(last / "optimizer.pt", map_location="cpu"))
         sched.load_state_dict(torch.load(last / "scheduler.pt", map_location="cpu"))
         say(f"[yellow]Kaldığı yerden devam: adım {step}/{steps_total}[/yellow]")
     say(f"[cyan]{steps_total} adım ({a.accum} mikro-batch/adım), {len(schedule)} mikro-batch[/cyan]")
 
+    if world > 1 and not params_in_sync(dist, params, decider.device):
+        raise SystemExit("kartlar aynı parametrelerle başlamadı")
     decider.backbone.train()
     log = (out / "train_log.jsonl").open("a", encoding="utf-8") if main else None
     running, t_step = 0.0, time.time()
@@ -434,6 +472,8 @@ def train(a) -> None:
         sched.step()
         opt.zero_grad(set_to_none=True)
         step += 1
+        if world > 1 and step == 1 and not params_in_sync(dist, params, decider.device):
+            raise SystemExit("kartlar ilk adımdan sonra ayrıştı")
         if a.bench and step == a.bench + 1:
             torch.cuda.synchronize()
             dt = time.time() - t_bench
@@ -479,7 +519,7 @@ def train(a) -> None:
                 decider.save_adapter(tmp, {"step": step})
                 torch.save(opt.state_dict(), tmp / "optimizer.pt")
                 torch.save(sched.state_dict(), tmp / "scheduler.pt")
-                (tmp / "trainer_state.json").write_text(json.dumps({"step": step, "best": best}))
+                (tmp / "trainer_state.json").write_text(json.dumps({"step": step, "best": best, "token_budget": a.token_budget, "accum": a.accum}))
                 _swap_in(tmp, last)
             if world > 1:
                 dist.barrier()
