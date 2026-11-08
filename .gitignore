@@ -33,6 +33,8 @@ Thumbs.db
 # Yerel çalışma notları (public repoya girmez)
 CLAUDE.local.md
 PROJECT_STATE.md
+/status.md
+/project-state.md
 
 # Pipeline çıktıları
 /runs/
@@ -40,6 +42,7 @@ PROJECT_STATE.md
 
 # Kişisel/yerel dosyalar
 yerel/
+/local/
 
 # İndirilen modeller (Pusula Nano vb.)
 /models/
