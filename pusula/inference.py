@@ -151,13 +151,16 @@ class BaseEngine:
         return {"path": f"{topic}.{answers[Q_INTENT]['choice']}", "answers": answers}
 
 
+OWN_BASE_MODES = ("1", "templates", "0")   # PUSULA_OWN_BASE values, see D3Engine.load
+
+
 class D3Engine(BaseEngine):
     """Pusula's main model: Decision 3.0 fine-tuned for Turkish (4-bit base + LoRA adapter)."""
 
     model_name = "pusula-d3"
 
     def __init__(self, decider, token_budget: int = 16384, calibration: Optional[Mapping[str, Any]] = None,
-                 own_base: bool = False):
+                 own_base: bool = False, custom_base: bool = True):
         self.decider = decider
         self.token_budget = token_budget
         self._lock = threading.Lock()
@@ -165,6 +168,8 @@ class D3Engine(BaseEngine):
         # is answered by the base Decision 3.0 (adapter off). 31 Oct 2026 measurement: on users' own questions in
         # unseen sectors the base model scored higher than the fine-tuned adapters (92.8 vs 90.5 / 91.2).
         self.own_base = own_base
+        # custom_base=False keeps own questions on the adapter; own_base then covers only the BASE_TEMPLATES
+        self.custom_base = custom_base
         self._builtin: Optional[tuple[set[str], list[Question]]] = None
         self._base_templates: Optional[list[Question]] = None
         # per-option log-prob biases for the built-in universal questions (pusula.calibrate); applied only when
@@ -186,9 +191,17 @@ class D3Engine(BaseEngine):
     def load(cls, base: str, adapter: Optional[str] = None, device: str = "cuda:0",
              load_in_4bit: Optional[bool] = None, own_base: Optional[bool] = None) -> "D3Engine":
         """`load_in_4bit=None` picks BF16 when the weights fit the GPU, else 4-bit (PUSULA_D3_4BIT overrides).
-        `own_base=None` reads PUSULA_OWN_BASE (default "1": own questions are answered by the base model; "0" = adapter)."""
+        `own_base=None` reads PUSULA_OWN_BASE: "1" (default) own questions and the BASE_TEMPLATES are answered by the base
+        model; "templates" only the BASE_TEMPLATES (own questions keep the adapter); "0" the adapter answers everything.
+        A bool `own_base` keeps the "1" / "0" meaning."""
         from .d3model import D3Decider
 
+        custom_base = True
+        if own_base is None:   # read before the weights load, so a wrong value fails at once
+            mode = os.environ.get("PUSULA_OWN_BASE", "1").strip().lower()   # v2.0 default "1" (user decision, 31 Oct 2026)
+            if mode not in OWN_BASE_MODES:
+                raise ValueError(f"PUSULA_OWN_BASE must be one of {', '.join(OWN_BASE_MODES)}, not {mode!r}")
+            own_base, custom_base = mode != "0", mode != "templates"
         base = os.path.expanduser(base)
         adapter = os.path.expanduser(adapter) if adapter else None
         decider = D3Decider.load(base, adapter=adapter, device=device, load_in_4bit=load_in_4bit)
@@ -198,9 +211,7 @@ class D3Engine(BaseEngine):
         if os.path.isfile(calib_file):
             with open(calib_file, encoding="utf-8") as f:
                 calibration = json.load(f)
-        if own_base is None:
-            own_base = os.environ.get("PUSULA_OWN_BASE", "1") != "0"   # v2.0 default (user decision, 31 Oct 2026)
-        engine = cls(decider, calibration=calibration, own_base=bool(own_base and adapter))
+        engine = cls(decider, calibration=calibration, own_base=bool(own_base and adapter), custom_base=custom_base)
         if adapter is None:
             engine.model_name = "d3-base"
         return engine
@@ -222,13 +233,15 @@ class D3Engine(BaseEngine):
         return name in names or q in qs
 
     def _use_base(self, name: str, q: Question) -> bool:
-        """own_base routing: own questions, and the BASE_TEMPLATES (by name or content), go to the base model."""
+        """own_base routing: the BASE_TEMPLATES (by name or content), and own questions unless custom_base is off, go to the base model."""
         if not self.own_base:
             return False
         if self._base_templates is None:
             universal = load_taxonomy().universal
             self._base_templates = [universal[n] for n in self.BASE_TEMPLATES if n in universal]
-        return not self._is_builtin(name, q) or name in self.BASE_TEMPLATES or q in self._base_templates
+        if name in self.BASE_TEMPLATES or q in self._base_templates:
+            return True
+        return self.custom_base and not self._is_builtin(name, q)
 
     @torch.inference_mode()
     def decide_many(self, requests: Sequence[tuple[str, QuestionsIn]]) -> list[dict[str, dict[str, Any]]]:

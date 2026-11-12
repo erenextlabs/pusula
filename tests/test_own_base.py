@@ -121,3 +121,36 @@ def test_base_templates_use_base():
     off = RecordingDecider()
     D3Engine(off).decide_many([("Siparişim ne zaman gelir?", {"eksik_bilgi": eb})])
     assert {f for f, _ in off.calls} == {False}                 # own_base off: the adapter answers everything
+
+
+def test_templates_mode_keeps_own_questions_on_adapter():
+    tax = load_taxonomy()
+    eb = tax.universal["eksik_bilgi"]
+    qs = _questions()
+    dec = RecordingDecider()
+    res = D3Engine(dec, own_base=True, custom_base=False).decide_many([("Kargom gelmedi", {**qs, "eksik_bilgi": eb})])[0]
+    assert sum(n for f, n in dec.calls if f) == 1               # only eksik_bilgi goes to the base model
+    assert sum(n for f, n in dec.calls if not f) == 3           # own question and the two built-in ones keep the adapter
+    assert res["eksik_bilgi"]["noul"] < 0.5 and res["kendi_sorum"]["noul"] > 0.5
+
+
+@pytest.mark.parametrize("mode,own,custom", [("1", True, True), ("templates", True, False), ("0", False, True), (" Templates ", True, False)])
+def test_load_reads_own_base_mode(monkeypatch, mode, own, custom):
+    import pusula.d3model as d3m
+
+    class Dec:
+        backbone = type("B", (), {"eval": lambda self: None})()
+
+    monkeypatch.setattr(d3m.D3Decider, "load", classmethod(lambda cls, *a, **k: Dec()))
+    monkeypatch.setenv("PUSULA_OWN_BASE", mode)
+    eng = D3Engine.load("/nonexistent/base", adapter="/nonexistent/adapter")
+    assert (eng.own_base, eng.custom_base) == (own, custom)
+
+
+def test_load_rejects_unknown_own_base_mode(monkeypatch):
+    import pusula.d3model as d3m
+
+    monkeypatch.setattr(d3m.D3Decider, "load", classmethod(lambda cls, *a, **k: None))
+    monkeypatch.setenv("PUSULA_OWN_BASE", "yes")
+    with pytest.raises(ValueError):
+        D3Engine.load("/nonexistent/base", adapter="/nonexistent/adapter")
