@@ -416,3 +416,107 @@ def test_val_every_must_be_a_multiple_of_save_every():
     from pusula.d3train import train
     with pytest.raises(SystemExit, match="katı"):
         train(argparse.Namespace(val_every=75, save_every=50))
+
+
+def _safety_rows(n_risky, n_safe, prefix="g"):
+    from pusula.schema import Example
+
+    q = Question(type="choice", instructions="?", criteria={"guvenli": None, "prompt_enjeksiyonu": None})
+    return [Example(id=f"{prefix}{i}", state="x", questions={"guvenlik": q},
+                    labels={"final": {"guvenlik": "prompt_enjeksiyonu" if i < n_risky else "guvenli"}})
+            for i in range(n_risky + n_safe)]
+
+
+def test_rare_first_by_matches_rare_first():
+    # the builders' version gives the same order as the training sampler for the same rows and seed
+    from pusula.d3train import rare_first, rare_first_by
+
+    rows = [(ex, "guvenlik") for ex in _safety_rows(12, 288)]
+    # frozen from the code before the split (git c8bcd39): the same seed must give the same order
+    assert [ex.id for ex, _ in rare_first(rows, "final", random.Random(0), 40)[:12]] == [
+        "g34", "g116", "g10", "g57", "g63", "g88", "g68", "g103", "g299", "g188", "g184", "g283"]
+    for seed in range(5):
+        a = rare_first(rows, "final", random.Random(seed), 40)
+        b = rare_first_by(rows, lambda p: p[0].labels["final"]["guvenlik"], random.Random(seed), 40)
+        assert [ex.id for ex, _ in a] == [ex.id for ex, _ in b]
+    # natural share 4 %: the first 40 rows hold ceil(3 * 40 * 12 / 300) = 5 risky rows (natural 1.6)
+    first = rare_first_by(rows, lambda p: p[0].labels["final"]["guvenlik"], random.Random(0), 40)[:40]
+    assert sum(ex.labels["final"]["guvenlik"] != "guvenli" for ex, _ in first) == 5
+
+
+def test_select_pairs_are_the_pairs_build_items_uses():
+    from pusula.d3train import select_pairs
+
+    rows = _with_filler(_noul_rows(30, 170)) + _safety_rows(10, 190)
+    pairs = select_pairs(rows, "final", random.Random(4), 60, None, True)
+    items = build_items(rows, FakeDecider(), "final", random.Random(4), max_prompts=60, class_balance=True)
+    assert [name for _, name in pairs] == [it.name for it in items] and len(items) == 60
+    assert [it.count for it in items] == [len(ex.questions[n].option_keys()) for ex, n in pairs]
+
+
+def test_build_items_unchanged_by_the_split():
+    # digests of (name, label, count, token ids) from the code before select_pairs existed (git c8bcd39)
+    import hashlib
+
+    def digest(items):
+        return hashlib.sha256(repr([(it.name, it.label, it.count, tuple(it.ids)) for it in items]).encode()).hexdigest()[:16]
+
+    rows = _with_filler(_noul_rows(30, 170)) + _safety_rows(10, 190)
+    for balance, want in ((True, "e005563cbc01d548"), (frozenset({"guvenlik"}), "ee82cfdc6c31f50c"), (False, "c611d0b3b236fa25")):
+        assert digest(build_items(rows, FakeDecider(), "final", random.Random(4), max_prompts=60, class_balance=balance)) == want
+
+
+def test_risky_shares_and_floors():
+    import pytest
+
+    from pusula.d3train import floor_problems, parse_floors, risky_shares
+
+    pairs = [(ex, "guvenlik") for ex in _safety_rows(3, 97)] + [(ex, "hakaret") for ex in _noul_rows(5, 5)]
+    shares = risky_shares(pairs, "final")
+    assert shares == {"guvenlik": {"n": 100, "risky": 3, "pct": 3.0}}  # the noul test "hakaret" has no "yok": not counted
+    floors = parse_floors("guvenlik=6, can_guvenligi=12")
+    assert floors == {"guvenlik": 6.0, "can_guvenligi": 12.0}
+    probs = floor_problems(shares, floors)
+    assert len(probs) == 2 and probs[0].startswith("can_guvenligi: eğitimde yok") and "guvenlik: riskli pay %3" in probs[1]
+    assert floor_problems(shares, {"guvenlik": 3.0}) == []  # equal to the floor passes
+    assert parse_floors("") == {}
+    # 1 of 3 is 33.333...%: a floor of 33.334 must fail even though the shown percent is rounded to 33.33
+    third = risky_shares([(ex, "guvenlik") for ex in _safety_rows(1, 2)], "final")
+    assert third["guvenlik"]["pct"] == 33.33 and floor_problems(third, {"guvenlik": 33.334}) != []
+    assert floor_problems(third, {"guvenlik": 33.333}) == []
+    for bad in ("guvnlik=6", "guvenlik", "guvenlik=x", "guvenlik=nan", "guvenlik=inf", "guvenlik=-1", "guvenlik=101"):
+        with pytest.raises(SystemExit):
+            parse_floors(bad)
+
+
+def test_check_and_train_stop_below_the_safety_floor(tmp_path, monkeypatch, capsys):
+    import json
+
+    import pytest
+
+    from pusula import d3train
+
+    monkeypatch.setattr(d3train, "TokenizerDecider", lambda _dir: FakeDecider())
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "train.jsonl").write_text("".join(ex.model_dump_json() + "\n" for ex in _safety_rows(2, 98)))
+    (data / "val.jsonl").write_text("".join(ex.model_dump_json() + "\n" for ex in _safety_rows(1, 2, "v")))
+    d3train.main(["check", "--d3", "x", "--data", str(data), "--max-prompts", "0", "--min-risky", "guvenlik=2"])
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["safety_risky_pct"]["guvenlik"]["pct"] == 2.0
+    with pytest.raises(SystemExit):
+        d3train.main(["check", "--d3", "x", "--data", str(data), "--max-prompts", "0", "--min-risky", "guvenlik=6"])
+    assert "alt sınır %6" in capsys.readouterr().out
+    with pytest.raises(SystemExit):  # a floor without training data is a gate problem, not silently skipped
+        d3train.main(["check", "--d3", "x", "--min-risky", "guvenlik=6"])
+
+    pytest.importorskip("torch")
+    from pusula import d3model
+
+    def no_model(*_a, **_k):
+        raise AssertionError("d3 must not load when a floor fails")
+
+    monkeypatch.setattr(d3model.D3Decider, "load", no_model)
+    monkeypatch.setattr(d3train, "_dist", lambda: (0, 1, "cpu"))
+    with pytest.raises(SystemExit, match="alt sınırın altında"):
+        d3train.main(["train", "--d3", "x", "--data", str(data), "--out", str(tmp_path / "out"), "--max-prompts", "0",
+                      "--min-risky", "guvenlik=6"])

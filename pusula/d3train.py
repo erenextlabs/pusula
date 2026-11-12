@@ -43,6 +43,11 @@ class Item:
 
 
 BOOST_MAX = 3.0  # class balance: a rare label value gets at most 3 times its natural share (user decision, 21 Oct 2026)
+# The value that means "nothing risky" in each safety question. Every other value is a risky label. A training run whose
+# risky share falls far below the earlier release's shares loses safety catches: Pusula 2.1 (12 Nov 2026) saw 2.2 %
+# risky guvenlik labels where the Pusula 2.0 rounds saw 3.1 % and 9.5 %, and missed 7 risky items 2.0 had caught.
+SAFE_VALUE = {"guvenlik": "guvenli", "can_guvenligi": "yok", "dolandiricilik": "false", "hakaret": "yok",
+              "kisisel_veri": "false"}
 
 
 def rare_first(rows: list, label_source: str, rng: random.Random, share: int, boost: float = BOOST_MAX) -> list:
@@ -54,14 +59,25 @@ def rare_first(rows: list, label_source: str, rng: random.Random, share: int, bo
     differ per row, such as the writer's own questions s1-s3 (choice keys almost all unique, mixed with noul and score),
     is shuffled as in v1.0: balancing by answer string would fill its share with one-off choice keys."""
     rows = list(rows)
+    kinds = {(p[0].questions[p[1]].type, tuple(p[0].questions[p[1]].option_keys())) for p in rows}
+    if len(kinds) > 1:
+        rng.shuffle(rows)
+        return rows
+    return rare_first_by(rows, lambda p: p[0].labels[label_source][p[1]], rng, share, boost)
+
+
+def rare_first_by(rows: list, label_of, rng: random.Random, share: int, boost: float = BOOST_MAX) -> list:
+    """`rare_first` for any rows of one fixed-option question name: `label_of(row)` gives the row's label value. Used by
+    the data builders that sample a name's share themselves (12 Nov 2026: the v2.1 builder sampled every name at
+    random and the safety questions lost their rare values, see SAFE_VALUE)."""
+    rows = list(rows)
     rng.shuffle(rows)
     n = len(rows)
-    kinds = {(p[0].questions[p[1]].type, tuple(p[0].questions[p[1]].option_keys())) for p in rows}
-    if share >= n or len(kinds) > 1:
+    if share >= n:
         return rows
     by_label = defaultdict(list)
     for p in rows:  # rows are shuffled: each group is a random sample
-        by_label[p[0].labels[label_source][p[1]]].append(p)
+        by_label[label_of(p)].append(p)
     cap = {k: min(len(g), math.ceil(boost * share * len(g) / n)) for k, g in by_label.items()}
     order = list(by_label)
     rng.shuffle(order)
@@ -102,14 +118,49 @@ def _balance(a) -> bool | frozenset:
     return not a.no_class_balance
 
 
-def build_items(examples: list[Example], decider, label_source: str, rng: Optional[random.Random],
-                max_prompts: int = 0, weights: Optional[dict[str, float]] = None,
-                class_balance: bool | frozenset = False) -> list[Item]:
-    from .d3model import prompt_for, shuffled_order
+def risky_shares(pairs: list, label_source: str) -> dict:
+    """Risky label share of each safety question (SAFE_VALUE) among the chosen (example, name) pairs. A row whose options
+    do not hold the safe value (another question under the same name) is not counted."""
+    n, risky = defaultdict(int), defaultdict(int)
+    for ex, name in pairs:
+        if name in SAFE_VALUE and SAFE_VALUE[name] in ex.questions[name].option_keys():
+            n[name] += 1
+            risky[name] += ex.labels[label_source][name] != SAFE_VALUE[name]
+    return {name: {"n": n[name], "risky": risky[name], "pct": round(100 * risky[name] / n[name], 2)} for name in sorted(n)}
 
+
+def parse_floors(text: str) -> dict[str, float]:
+    """--min-risky "guvenlik=6,hakaret=3.5" -> {"guvenlik": 6.0, "hakaret": 3.5} (percent of the name's training items)."""
+    floors = {}
+    for part in filter(None, (x.strip() for x in text.split(","))):
+        name, _, pct = part.partition("=")
+        try:
+            value = float(pct)
+            if name not in SAFE_VALUE or not 0 <= value <= 100:  # also rejects nan (every comparison is False)
+                raise ValueError(name)
+            floors[name] = value
+        except ValueError:
+            raise SystemExit(f"--min-risky: '{part}' tanınmadı (ad=yüzde; adlar: {', '.join(SAFE_VALUE)})") from None
+    return floors
+
+
+def floor_problems(shares: dict, floors: dict[str, float]) -> list[str]:
+    """A named safety question that is missing from the training items, or whose risky share is below its floor."""
+    out = []
+    for name, pct in sorted(floors.items()):
+        got = shares.get(name)
+        if got is None:
+            out.append(f"{name}: eğitimde yok (riskli pay alt sınırı %{pct:g})")
+        elif 100 * got["risky"] < pct * got["n"]:  # counts, not the rounded percent shown
+            out.append(f"{name}: riskli pay %{got['pct']:g} ({got['risky']} / {got['n']}), alt sınır %{pct:g}")
+    return out
+
+
+def select_pairs(examples: list[Example], label_source: str, rng: Optional[random.Random], max_prompts: int = 0,
+                 weights: Optional[dict[str, float]] = None, class_balance: bool | frozenset = False) -> list:
+    """The (example, name) pairs a run trains on, in training order before tokenization (the first use of `rng`:
+    the same seed gives the same pairs here and in `build_items`)."""
     pairs = [(ex, name) for ex in examples for name in ex.labels.get(label_source, {})]
-    if not pairs:
-        return []
     if max_prompts and len(pairs) > max_prompts and rng is not None:
         # balance question names: a share proportional to each name's weight (default 1), leftovers at random;
         # class_balance: inside a fixed-option name the rare label values get a larger share (see rare_first)
@@ -130,6 +181,17 @@ def build_items(examples: list[Example], decider, label_source: str, rng: Option
             rest += rows[share:]
         rng.shuffle(rest)
         pairs = chosen + rest[: max_prompts - len(chosen)]
+    return pairs
+
+
+def build_items(examples: list[Example], decider, label_source: str, rng: Optional[random.Random],
+                max_prompts: int = 0, weights: Optional[dict[str, float]] = None,
+                class_balance: bool | frozenset = False) -> list[Item]:
+    from .d3model import prompt_for, shuffled_order
+
+    pairs = select_pairs(examples, label_source, rng, max_prompts, weights, class_balance)
+    if not pairs:
+        return []
     prompts, meta = [], []
     for ex, name in pairs:
         q = ex.questions[name]
@@ -273,15 +335,23 @@ def run_check(a) -> None:
                         "mean_tokens": round(sum(lens) / max(len(lens), 1), 1),
                         "over_budget": sum(x > budget for x in lens)}
 
+    floors = parse_floors(a.min_risky)
+    if floors and not a.data:
+        problems.append("--min-risky --data olmadan denetlenemez")
     if a.data:
         weights = {name: a.focus_weight for name in a.focus.split(",") if name} if a.focus else None
         try:
-            train_items = build_items(read_examples(Path(a.data) / "train.jsonl"), decider, "final",
-                                      random.Random(a.seed), a.max_prompts, weights, _balance(a))
+            train_ex = read_examples(Path(a.data) / "train.jsonl")
+            shares = risky_shares(select_pairs(train_ex, "final", random.Random(a.seed), a.max_prompts, weights,
+                                               _balance(a)), "final")
+            train_items = build_items(train_ex, decider, "final", random.Random(a.seed), a.max_prompts, weights,
+                                      _balance(a))
             val_items = val_set(read_examples(Path(a.data) / "val.jsonl"), decider, a.seed, a.max_val)
         except Exception as e:  # noqa: BLE001 - every failure is a gate failure, reported with its cause
             problems.append(f"{a.data}: {type(e).__name__}: {e}")
         else:
+            report["safety_risky_pct"] = shares
+            problems += floor_problems(shares, floors)
             lengths("train", train_items, a.token_budget)
             lengths("val", val_items, a.token_budget)
             if not val_items:
@@ -391,6 +461,7 @@ def train(a) -> None:
     step's micro-batches are split across GPUs and the LoRA/readout gradients are averaged."""
     if a.val_every and a.val_every % a.save_every:  # before any GPU work
         raise SystemExit(f"--val-every {a.val_every} --save-every {a.save_every} katı olmalı (doğrulama yalnız kayıtta yapılır)")
+    floors = parse_floors(a.min_risky)
     import torch
     import torch.distributed as dist
 
@@ -412,6 +483,13 @@ def train(a) -> None:
     train_ex, val_ex = read_examples(Path(a.data) / "train.jsonl"), read_examples(Path(a.data) / "val.jsonl")
     if not a.bench and not any(ex.labels.get("final") for ex in val_ex):  # before d3 is loaded (GPU time)
         raise SystemExit(f"{Path(a.data) / 'val.jsonl'}: etiketli doğrulama sorusu yok; en iyi kayıt seçilemez")
+    weights = {name: a.focus_weight for name in a.focus.split(",") if name} if a.focus else None
+    shares = risky_shares(select_pairs(train_ex, "final", random.Random(a.seed), a.max_prompts, weights, _balance(a)),
+                          "final")  # the same pairs build_items picks below (same seed, the first use of the rng)
+    say("güvenlik riskli payı: " + (", ".join(f"{k} %{v['pct']:g} ({v['risky']}/{v['n']})" for k, v in shares.items()) or "yok"))
+    bad = floor_problems(shares, floors)
+    if bad:  # before d3 is loaded (GPU time)
+        raise SystemExit("güvenlik riskli payı alt sınırın altında: " + "; ".join(bad))
     decider = D3Decider.load(a.d3, adapter=start, lora_rank=a.lora_rank,
                              gradient_checkpointing=not a.no_grad_ckpt, load_in_4bit=_precision(a), device=device)
     decider.readout.requires_grad_(True)
@@ -419,7 +497,6 @@ def train(a) -> None:
         sync_params(dist, [p for p in decider.backbone.parameters() if p.requires_grad] + [decider.readout])
     rng = random.Random(a.seed)
     t0 = time.time()
-    weights = {name: a.focus_weight for name in a.focus.split(",") if name} if a.focus else None
     train_items = build_items(train_ex, decider, "final", rng, a.max_prompts, weights, _balance(a))
     val_items = val_set(val_ex, decider, a.seed, a.max_val)
     say(f"[cyan]{len(train_items)} eğitim / {len(val_items)} doğrulama sorusu "
@@ -655,6 +732,9 @@ def main(argv=None) -> None:
                    help="sample each question name's share at random (v1.0) instead of rare label values first")
     t.add_argument("--balance-only", default="",
                    help="comma-separated names: rare label values first only in these names, the rest at random")
+    t.add_argument("--min-risky", default="",
+                   help="safety floors, e.g. guvenlik=6,hakaret=3.5: stop before loading d3 when a named safety question "
+                        "is missing or its risky label share (percent of its training items) is below the floor")
     t.add_argument("--epochs", type=int, default=1)
     t.add_argument("--lora-rank", type=int, default=32)
     t.add_argument("--init-adapter", default=None, help="start from this trained adapter (LoRA + readout) instead of base d3")
@@ -699,6 +779,7 @@ def main(argv=None) -> None:
     c.add_argument("--max-val", type=int, default=1500)
     c.add_argument("--no-class-balance", action="store_true")
     c.add_argument("--balance-only", default="")
+    c.add_argument("--min-risky", default="", help="as in train: a floor below its value is a gate failure")
     c.add_argument("--seed", type=int, default=17)
     c.add_argument("--token-budget", type=int, default=8192)
     c.add_argument("--eval-token-budget", type=int, default=16384)
