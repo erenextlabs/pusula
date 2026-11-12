@@ -22,6 +22,7 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
+from .d3train import floor_problems, parse_floors, risky_shares
 from .jsonl import read_examples
 from .llm import console
 from .model import BASE_MODEL, PairEncoder, PusulaModel
@@ -192,6 +193,21 @@ def fit_temperatures(preds) -> dict[str, float]:
     return temps
 
 
+def check_floors(examples: list[Example], text: str) -> None:
+    """--min-risky for the student, as in d3train: each named safety question's risky share among the training items
+    (labels "final") must reach its floor, or the run stops before any model loads. Nano 2.1 (12 Nov 2026) trained
+    on 3.1 % risky guvenlik and 2.4 % risky dolandiricilik items, slid toward the safe answer and missed 5 items
+    Nano 2.0 had caught."""
+    floors = parse_floors(text)
+    if not floors:
+        return
+    shares = risky_shares([(ex, name) for ex in examples for name in ex.labels.get("final", {})], "final")
+    console.print("Riskli paylar: " + ", ".join(f"{n} %{s['pct']:g} ({s['risky']}/{s['n']})" for n, s in shares.items()))
+    problems = floor_problems(shares, floors)
+    if problems:
+        raise SystemExit("Eğitim verisi riskli pay alt sınırının altında: " + "; ".join(problems))
+
+
 def train(args) -> None:
     from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
@@ -200,6 +216,8 @@ def train(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if args.token_budget is None:  # one 65,536-token batch needs about 100 GB in forward + backward on CPU (1.3-1.5 MB per token)
         args.token_budget = 65536 if device.type == "cuda" else 2048
+    train_examples = read_examples(Path(args.data) / "train.jsonl")
+    check_floors(train_examples, getattr(args, "min_risky", "") or "")  # before any model loads
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -217,7 +235,7 @@ def train(args) -> None:
     state = torch.load(ckpt / "trainer.pt", map_location="cpu", weights_only=False) if resume else None
     enc = PairEncoder(tokenizer, max_length=args.max_length)
     t0 = time.time()
-    train_data = Encoded(read_examples(Path(args.data) / "train.jsonl"), enc)
+    train_data = Encoded(train_examples, enc)
     val_data = Encoded(read_examples(Path(args.data) / "val.jsonl"), enc)
     console.print(f"[cyan]Tokenizasyon {time.time() - t0:.0f}s: train {len(train_data.items)} soru, "
                   f"val {len(val_data.items)} soru[/cyan]")
@@ -362,6 +380,8 @@ def main(argv=None) -> None:
     p.add_argument("--max-train-options", type=int, default=8)
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--min-risky", default="",
+                   help='safety floors, e.g. "guvenlik=6,dolandiricilik=5": percent risky among the name\'s training items')
     train(p.parse_args(argv))
 
 
