@@ -560,7 +560,16 @@ def run_eval(a) -> None:
 
     from .d3model import D3Decider
 
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    import os
+
+    import torch.distributed as dist
+
+    # torchrun (12 Nov 2026): every GPU scores every world-th micro-batch of each set, rank 0 writes the reports; the
+    # batches are the ones a single GPU builds, so the numbers are the same (evaluate). Plain python: one GPU, as before.
+    world = int(os.getenv("WORLD_SIZE", "1"))
+    rank, device = 0, ("cuda:0" if torch.cuda.is_available() else "cpu")
+    if world > 1:
+        rank, world, device = _dist()
     if len(a.data) != len(a.out):
         raise SystemExit(f"--data ({len(a.data)}) and --out ({len(a.out)}) must pair up")
     # one model load for every set (30 Oct 2026: a load per set cost ~3 min each, ~half of the evaluation time)
@@ -571,7 +580,9 @@ def run_eval(a) -> None:
         source = a.label_source or ("gold" if any("gold" in ex.labels for ex in examples) else "final")
         items = build_items(examples, decider, source, None)
         report = {"model": "pusula-d3" if a.adapter else "d3-base", "adapter": a.adapter, "data": data,
-                  "reference": source, **evaluate(decider, items, a.token_budget)}
+                  "reference": source, **evaluate(decider, items, a.token_budget, rank, world, dist if world > 1 else None)}
+        if rank != 0:
+            continue
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         # atomic: a run cut while writing must not leave a partial report that the next run takes as done
@@ -580,6 +591,9 @@ def run_eval(a) -> None:
         tmp.replace(out)
         console.print(f"EVAL_DONE {out}")
         console.print_json(data=report)
+    if world > 1:
+        dist.barrier()  # rank 0 has written every report
+        dist.destroy_process_group()
 
 
 def ddp_probe(dist, device: str, rank: int, world: int, mb: int = 256, small: int = 200) -> tuple[bool, float]:
