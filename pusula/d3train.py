@@ -197,19 +197,30 @@ def micro_batches(items: list[Item], token_budget: int, rng: Optional[random.Ran
     return batches
 
 
-def evaluate(decider, items: list[Item], token_budget: int) -> dict:
+def evaluate(decider, items: list[Item], token_budget: int, rank: int = 0, world: int = 1, dist=None) -> dict:
+    """Accuracy and ECE. With world > 1 (training validation, 12 Nov 2026) every rank builds the same micro-batches and
+    scores every world-th one, then the rows are gathered and put back in the single-GPU order: each batch holds the same
+    questions as on one GPU, so the numbers are the same while all training GPUs work (before: rank 0 alone, others waited)."""
     import torch
 
+    batches = micro_batches(items, token_budget, None)
+    rows = []  # (batch index, position, name, ok, confidence)
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+        for bi in range(rank, len(batches), world):
+            batch = batches[bi]
+            probs = torch.softmax(decider.logits([it.ids for it in batch], [it.count for it in batch]), dim=-1)
+            for j, (it, p) in enumerate(zip(batch, probs)):
+                rows.append((bi, j, it.name, int(p.argmax().item() == it.label), p.max().item()))
+    if world > 1:
+        parts: list = [None] * world
+        dist.all_gather_object(parts, rows)
+        rows = sorted((r for part in parts for r in part), key=lambda r: (r[0], r[1]))
     per_q: dict[str, list[int]] = defaultdict(list)
     conf, ok_all = [], []
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        for batch in micro_batches(items, token_budget, None):
-            probs = torch.softmax(decider.logits([it.ids for it in batch], [it.count for it in batch]), dim=-1)
-            for it, p in zip(batch, probs):
-                ok = int(p.argmax().item() == it.label)
-                per_q[it.name].append(ok)
-                conf.append(p.max().item())
-                ok_all.append(ok)
+    for _, _, name, ok, c in rows:
+        per_q[name].append(ok)
+        conf.append(c)
+        ok_all.append(ok)
     acc = {k: round(sum(v) / len(v), 4) for k, v in sorted(per_q.items())}
     bins, ece = 15, 0.0
     for b in range(bins):
@@ -512,18 +523,20 @@ def train(a) -> None:
             due = flag.item() > 0
         if not a.bench and due:
             t_save = time.time()
-            if main and val_due(step, steps_total, a.val_every):
+            if val_due(step, steps_total, a.val_every):  # every rank takes this branch (due and the schedule are shared)
                 decider.backbone.eval()
-                m = evaluate(decider, val_items, a.val_token_budget or a.token_budget)
+                m = evaluate(decider, val_items, a.val_token_budget or a.token_budget, rank, world, dist)
                 decider.backbone.train()
-                say(f"[bold]adım {step}[/bold] val macro_acc {m['macro_acc']:.4f} ece {m['ece']:.4f}")
-                log.write(json.dumps({"step": step, "val": m}, ensure_ascii=False) + "\n")
-                log.flush()
-                if m["macro_acc"] > best:  # written to <name>.tmp, then swapped in (a kill never leaves a torn folder)
+                if main:
+                    say(f"[bold]adım {step}[/bold] val macro_acc {m['macro_acc']:.4f} ece {m['ece']:.4f}")
+                    log.write(json.dumps({"step": step, "val": m}, ensure_ascii=False) + "\n")
+                    log.flush()
+                if m["macro_acc"] > best:  # same m on every rank; written to <name>.tmp, then swapped in
                     best = m["macro_acc"]
-                    tmp = _fresh(out / "best.tmp")
-                    decider.save_adapter(tmp, {"step": step, "val": m})
-                    _swap_in(tmp, out / "best")
+                    if main:
+                        tmp = _fresh(out / "best.tmp")
+                        decider.save_adapter(tmp, {"step": step, "val": m})
+                        _swap_in(tmp, out / "best")
             elif main:
                 say(f"adım {step} kayıt (doğrulama yok)")
             if main:
