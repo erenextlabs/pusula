@@ -205,6 +205,7 @@ def train(args) -> None:
 
     # older callers (curate.flag_noise) build the Namespace by hand: the checkpoint options default to off
     init, save_every, max_steps = getattr(args, "init", None), getattr(args, "save_every", 0), getattr(args, "max_steps", 0)
+    total_steps = getattr(args, "total_steps", 0)  # run length: the LR schedule ends here and the run finishes normally
     ckpt = out / "ckpt"
     resume = getattr(args, "resume", False) and ckpt.exists()
     source = ckpt if resume else init
@@ -232,6 +233,8 @@ def train(args) -> None:
     steps_per_epoch = len(make_batches(train_data, enc, args.token_budget, args.max_train_options,
                                        random.Random(0)))
     total = steps_per_epoch * args.epochs
+    if total_steps:
+        total = min(total, total_steps)
     sched = get_linear_schedule_with_warmup(opt, int(total * args.warmup), total)
     console.print(f"[cyan]Eğitim: {args.epochs} epoch x ~{steps_per_epoch} adım[/cyan]")
 
@@ -281,9 +284,13 @@ def train(args) -> None:
         if max_steps and step >= max_steps:
             log.close()
             return
+        if total_steps and step >= total_steps and not finished:
+            break  # an earlier epoch already ended the run
         for i, batch in enumerate(batches, 1):
             if i <= finished:
                 continue
+            if total_steps and step >= total_steps:
+                break  # the run's length is reached: validate, keep the weights, fit temperatures
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device.type == "cuda"):
                 logits, _ = forward_batch(model, enc, train_data, batch, device)
             loss = batch_loss(logits, batch, args.alpha, device)
@@ -302,7 +309,7 @@ def train(args) -> None:
                 log.write(json.dumps({"epoch": epoch, "step": step, "loss": avg}) + "\n")
                 log.flush()
             stop = max_steps > 0 and step >= max_steps
-            if save_every > 0 and (step % save_every == 0 or stop):
+            if save_every > 0 and (step % save_every == 0 or stop or step == total_steps):
                 checkpoint()
             if stop:
                 log.close()
@@ -318,6 +325,8 @@ def train(args) -> None:
         if save_every > 0:
             i = len(batches)
             checkpoint(done=True)
+        if total_steps and step >= total_steps:
+            break
 
     log.close()
     model, _, _ = PusulaModel.load(out / "best", device=device)
@@ -339,7 +348,9 @@ def main(argv=None) -> None:
     p.add_argument("--init", help="initialize from a saved Pusula model")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--save-every", type=int, default=0)
-    p.add_argument("--max-steps", type=int, default=0)
+    p.add_argument("--max-steps", type=int, default=0, help="stop after this many steps (an interruption: resume continues)")
+    p.add_argument("--total-steps", type=int, default=0,
+                   help="train this many steps in all: the LR schedule ends here, then val, best and temperatures as after the last epoch")
     p.add_argument("--max-length", type=int, default=1024)
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--lr", type=float, default=3e-5)

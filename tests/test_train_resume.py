@@ -71,3 +71,24 @@ def test_legacy_namespace_and_init_length(pilot, tmp_path, tiny_engine, monkeypa
     assert json.loads((tmp_path / "legacy" / "best" / "pusula.json").read_text())["max_length"] == 96
     T.main([*pilot, "--out", str(tmp_path / "init96"), "--max-length", "96", "--epochs", "1"])
     assert json.loads((tmp_path / "init96" / "best" / "pusula.json").read_text())["max_length"] == 96
+
+
+@pytest.mark.parametrize("total,stop", [(3, 2), (6, 2), (3, 3), (4, 2), (4, 4), (8, 5), (8, 8)])  # 4 steps per epoch
+def test_total_steps_ends_schedule_and_resumes(pilot, tmp_path, total, stop):
+    """--total-steps: the LR schedule reaches 0 at that step, the run ends with best + temperatures; an interruption resumes exactly."""
+    full, resumed = tmp_path / "full", tmp_path / "resumed"
+    T.main([*pilot, "--out", str(full), "--total-steps", str(total)])
+    state = torch.load(full / "ckpt" / "trainer.pt", map_location="cpu", weights_only=False)
+    assert state["step"] == total and state["done"]
+    assert all(lr == 0.0 for lr in state["scheduler"]["_last_lr"])
+    assert (full / "val_metrics.json").exists()
+    T.main([*pilot, "--out", str(resumed), "--total-steps", str(total), "--max-steps", str(stop)])
+    assert not (resumed / "val_metrics.json").exists()
+    T.main([*pilot, "--out", str(resumed), "--total-steps", str(total), "--resume"])
+    a, _, _ = PusulaModel.load(full / "best")
+    b, _, _ = PusulaModel.load(resumed / "best")
+    for key, weight in a.state_dict().items():
+        assert torch.allclose(weight, b.state_dict()[key], atol=1e-6, rtol=0)
+    assert (full / "val_metrics.json").read_text() == (resumed / "val_metrics.json").read_text()
+    T.main([*pilot, "--out", str(resumed), "--total-steps", str(total), "--resume"])   # finished run: no further steps
+    assert torch.load(resumed / "ckpt" / "trainer.pt", map_location="cpu", weights_only=False)["step"] == total
