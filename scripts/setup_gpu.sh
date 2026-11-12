@@ -41,9 +41,25 @@ if [ ! -x "/usr/local/cuda-$TCU/bin/nvcc" ] && command -v apt-get >/dev/null; th
   sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "cuda-toolkit-${TCU/./-}" >/dev/null 2>&1 || true
 fi
 if [ -x "/usr/local/cuda-$TCU/bin/nvcc" ]; then export CUDA_HOME="/usr/local/cuda-$TCU" PATH="/usr/local/cuda-$TCU/bin:$PATH"; fi
-# fast causal conv kernel for d3's Gated DeltaNet layers (otherwise a slow fallback is used)
-python -c "import causal_conv1d" 2>/dev/null || \
-  MAX_JOBS=${MAX_JOBS:-32} $PIP --no-deps --no-build-isolation "causal-conv1d==1.7.0"
+# fast causal conv kernel for d3's Gated DeltaNet layers (otherwise a slow fallback is used). First a build for this
+# machine's GPUs only (scripts/cc1d_native.py; the release build covers nine architectures: 37 min on 12 Nov 2026),
+# then the full release build if that fails. The times go to the log (measurement for the next rental).
+cc1d_native() {
+  local w src rc
+  w=$(mktemp -d) || return 1
+  src=$(python scripts/cc1d_native.py "$w") && CAUSAL_CONV1D_FORCE_BUILD=TRUE MAX_JOBS=${MAX_JOBS:-32} \
+    $PIP --no-deps --no-build-isolation "$src" && python -c "import causal_conv1d"
+  rc=$?; rm -rf "$w"; return $rc
+}
+if ! python -c "import causal_conv1d" 2>/dev/null; then
+  echo "causal-conv1d build start $(date -u +%T)"
+  if cc1d_native; then echo "causal-conv1d native build done $(date -u +%T)"
+  else
+    echo "causal-conv1d native build failed: full build $(date -u +%T)"
+    MAX_JOBS=${MAX_JOBS:-32} $PIP --no-deps --no-build-isolation "causal-conv1d==1.7.0"
+    echo "causal-conv1d full build done $(date -u +%T)"
+  fi
+fi
 if [[ ${WITH_VLLM:-0} == 1 ]]; then $PIP vllm; fi  # brings its own torch: use a dedicated image/venv
 
 if [[ ${1:-} == models ]]; then

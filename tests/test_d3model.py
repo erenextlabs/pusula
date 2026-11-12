@@ -399,3 +399,20 @@ def test_eval_loads_the_model_once_for_many_sets(tmp_path, monkeypatch):
     assert not list((tmp_path / "r").glob("*.tmp"))
     with pytest.raises(SystemExit):
         d3train.main(["eval", "--d3", "x", "--data", *files, "--out", outs[0]])
+
+
+def test_val_due_every_save_or_on_its_own_schedule():
+    from pusula.d3train import val_due
+    assert val_due(37, 440, 0) is True  # default: every save validates (old behaviour)
+    assert val_due(50, 1038, 100) is False and val_due(37, 1038, 100) is False  # schedule and clock saves only save
+    assert val_due(100, 1038, 100) is True and val_due(1038, 1038, 100) is True  # own schedule, last step
+
+
+def test_val_every_must_be_a_multiple_of_save_every():
+    import argparse
+
+    import pytest
+
+    from pusula.d3train import train
+    with pytest.raises(SystemExit, match="katı"):
+        train(argparse.Namespace(val_every=75, save_every=50))

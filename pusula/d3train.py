@@ -87,6 +87,13 @@ def save_due(step: int, steps_total: int, save_every: int, save_minutes: float, 
     return "clock" if save_minutes and since_save_s >= save_minutes * 60 else False
 
 
+def val_due(step: int, steps_total: int, val_every: int) -> bool:
+    """Validate at this save? Always when val_every is 0 (every save, the old behaviour); otherwise only on its own step
+    schedule and at the last step, so a clock save only writes the checkpoint (12 Nov 2026: a validation at every
+    15-minute save kept the other GPUs waiting, and the v2.1 candidate is the last checkpoint, not the best one)."""
+    return not val_every or step % val_every == 0 or step == steps_total
+
+
 def _balance(a) -> bool | frozenset:
     """Class balance: off (--no-class-balance), only in --balance-only names (31 Oct 2026: natural sampling for the
     routing and urgency priors, rare values first where the rare value is the point, e.g. eksik_bilgi true), or all."""
@@ -371,6 +378,8 @@ def params_in_sync(dist, params, device) -> bool:
 def train(a) -> None:
     """Single- or multi-GPU (torchrun --nproc-per-node N): every GPU holds a full d3 copy, each optimizer
     step's micro-batches are split across GPUs and the LoRA/readout gradients are averaged."""
+    if a.val_every and a.val_every % a.save_every:  # before any GPU work
+        raise SystemExit(f"--val-every {a.val_every} --save-every {a.save_every} katı olmalı (doğrulama yalnız kayıtta yapılır)")
     import torch
     import torch.distributed as dist
 
@@ -503,7 +512,7 @@ def train(a) -> None:
             due = flag.item() > 0
         if not a.bench and due:
             t_save = time.time()
-            if main:
+            if main and val_due(step, steps_total, a.val_every):
                 decider.backbone.eval()
                 m = evaluate(decider, val_items, a.val_token_budget or a.token_budget)
                 decider.backbone.train()
@@ -515,6 +524,9 @@ def train(a) -> None:
                     tmp = _fresh(out / "best.tmp")
                     decider.save_adapter(tmp, {"step": step, "val": m})
                     _swap_in(tmp, out / "best")
+            elif main:
+                say(f"adım {step} kayıt (doğrulama yok)")
+            if main:
                 tmp = _fresh(out / "last.tmp")
                 decider.save_adapter(tmp, {"step": step})
                 torch.save(opt.state_dict(), tmp / "optimizer.pt")
@@ -633,6 +645,9 @@ def main(argv=None) -> None:
     t.add_argument("--save-every", type=int, default=200)
     t.add_argument("--save-minutes", type=float, default=0,
                    help="also validate and save when this many minutes passed since the last save (0 = off)")
+    t.add_argument("--val-every", type=int, default=0,
+                   help="validate only every N steps (a multiple of --save-every) and at the last step; other saves "
+                        "only write the checkpoint (0 = validate at every save)")
     t.add_argument("--seed", type=int, default=17)
     t.add_argument("--precision", choices=["auto", "4bit", "bf16"], default="auto",
                    help="d3 weights: bf16 (LoRA, needs ~80 GB GPU) or 4bit (QLoRA); auto picks by GPU memory")
