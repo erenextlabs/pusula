@@ -510,6 +510,8 @@ Pusula is developed by Erenext's AI Lab. The contributors are listed below:
 | Hasan Şahin | Project lead | [hsnsahinhsn](https://github.com/hsnsahinhsn) | [hsnsahinhsn](https://huggingface.co/hsnsahinhsn) |
 | Ahmet Sayman | Contributor | [asayman](https://github.com/asayman) | [asaymantr](https://huggingface.co/asaymantr) |
 
+Contribution guidelines are given in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 If Pusula is used in research or in a product, the following citation is requested. The same information is provided
 in [`CITATION.cff`](CITATION.cff) and through the "Cite this repository" button on GitHub.
 

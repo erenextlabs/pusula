@@ -633,13 +633,12 @@ def train(a) -> None:
 
 
 def run_eval(a) -> None:
-    import torch
-
-    from .d3model import D3Decider
-
     import os
 
+    import torch
     import torch.distributed as dist
+
+    from .d3model import D3Decider
 
     # torchrun (12 Nov 2026): every GPU scores every world-th micro-batch of each set, rank 0 writes the reports; the
     # batches are the ones a single GPU builds, so the numbers are the same (evaluate). Plain python: one GPU, as before.

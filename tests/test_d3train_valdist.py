@@ -16,7 +16,7 @@ class _Decider:
 
     def logits(self, ids, counts):
         rows = []
-        for x, c in zip(ids, counts):
+        for x, _c in zip(ids, counts):
             g = torch.Generator().manual_seed(sum(v * (i + 1) for i, v in enumerate(x)) % (2**31))
             rows.append(torch.randn(4, generator=g))
         return torch.stack(rows)
