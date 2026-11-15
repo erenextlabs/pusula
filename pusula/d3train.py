@@ -40,6 +40,7 @@ class Item:
     label: int          # index of the label among the options as shown
     count: int          # number of options
     soft: Optional[list[float]] = None  # teacher distribution in the shown order (knowledge distillation)
+    ref: Optional[tuple] = None  # (position among the pairs, example id, option keys as shown): eval --preds
 
 
 BOOST_MAX = 3.0  # class balance: a rare label value gets at most 3 times its natural share (user decision, 21 Oct 2026)
@@ -193,18 +194,20 @@ def build_items(examples: list[Example], decider, label_source: str, rng: Option
     if not pairs:
         return []
     prompts, meta = [], []
-    for ex, name in pairs:
+    for k, (ex, name) in enumerate(pairs):
         q = ex.questions[name]
+        keys = q.option_keys()
         order = shuffled_order(q, rng) if rng is not None else None
-        label = q.option_keys().index(ex.labels[label_source][name])
+        label = keys.index(ex.labels[label_source][name])
         shown = order.index(label) if order is not None else label
         prompts.append(prompt_for(decider, ex.state, q, order))
         soft = ex.teacher.get(name)
         if soft is not None and order is not None:
             soft = [soft[i] for i in order]
-        meta.append((name, q.type, shown, len(q.option_keys()), soft))
+        ref = (k, ex.id, [keys[i] for i in order] if order is not None else list(keys))
+        meta.append((name, q.type, shown, len(keys), soft, ref))
     ids = decider.encode(prompts)
-    return [Item(n, t, i, lab, c, s) for i, (n, t, lab, c, s) in zip(ids, meta)]
+    return [Item(n, t, i, lab, c, s, r) for i, (n, t, lab, c, s, r) in zip(ids, meta)]
 
 
 def smoothed_ce(logits, labels, counts, eps: float):
@@ -259,10 +262,12 @@ def micro_batches(items: list[Item], token_budget: int, rng: Optional[random.Ran
     return batches
 
 
-def evaluate(decider, items: list[Item], token_budget: int, rank: int = 0, world: int = 1, dist=None) -> dict:
+def evaluate(decider, items: list[Item], token_budget: int, rank: int = 0, world: int = 1, dist=None,
+             preds: Optional[list] = None) -> dict:
     """Accuracy and ECE. With world > 1 (training validation, 12 Nov 2026) every rank builds the same micro-batches and
     scores every world-th one, then the rows are gathered and put back in the single-GPU order: each batch holds the same
-    questions as on one GPU, so the numbers are the same while all training GPUs work (before: rank 0 alone, others waited)."""
+    questions as on one GPU, so the numbers are the same while all training GPUs work (before: rank 0 alone, others waited).
+    `preds` (a list, eval --preds, 15 Nov 2026): one row per question is appended, see `pred_rows`."""
     import torch
 
     batches = micro_batches(items, token_budget, None)
@@ -272,14 +277,17 @@ def evaluate(decider, items: list[Item], token_budget: int, rank: int = 0, world
             batch = batches[bi]
             probs = torch.softmax(decider.logits([it.ids for it in batch], [it.count for it in batch]), dim=-1)
             for j, (it, p) in enumerate(zip(batch, probs)):
-                rows.append((bi, j, it.name, int(p.argmax().item() == it.label), p.max().item()))
+                top = int(p.argmax().item())
+                # only the item's own options: a batch with more options pads the rest (-1e4 logits, probability ~0)
+                pr = (it.ref, it.label, top, [round(v, 5) for v in p[:it.count].float().tolist()]) if preds is not None else None
+                rows.append((bi, j, it.name, int(top == it.label), p.max().item(), pr))
     if world > 1:
         parts: list = [None] * world
         dist.all_gather_object(parts, rows)
         rows = sorted((r for part in parts for r in part), key=lambda r: (r[0], r[1]))
     per_q: dict[str, list[int]] = defaultdict(list)
     conf, ok_all = [], []
-    for _, _, name, ok, c in rows:
+    for _, _, name, ok, c, _ in rows:
         per_q[name].append(ok)
         conf.append(c)
         ok_all.append(ok)
@@ -289,8 +297,23 @@ def evaluate(decider, items: list[Item], token_budget: int, rank: int = 0, world
         sel = [i for i, c in enumerate(conf) if b / bins < c <= (b + 1) / bins]
         if sel:
             ece += len(sel) / len(conf) * abs(sum(ok_all[i] for i in sel) / len(sel) - sum(conf[i] for i in sel) / len(sel))
+    if preds is not None:
+        preds.extend(pred_rows(rows))
     return {"n": len(ok_all), "macro_acc": round(sum(acc.values()) / max(len(acc), 1), 4),
             "micro_acc": round(sum(ok_all) / max(len(ok_all), 1), 4), "ece": round(ece, 4), "acc": acc}
+
+
+def pred_rows(rows: list) -> list[dict]:
+    """Per-question predictions in item order (messages in file order, each message's label keys in order): option
+    keys as shown, gold key, predicted key (argmax), its probability and every option's probability."""
+    out = []
+    for _, _, name, _, conf, (ref, label, top, p) in rows:
+        if ref is None:
+            raise ValueError("eval --preds needs items made by build_items")
+        k, ex_id, keys = ref
+        out.append({"item": k, "id": ex_id, "q": name, "gold": keys[label], "pred": keys[top], "conf": round(conf, 5),
+                    "keys": keys, "p": p})
+    return sorted(out, key=lambda r: r["item"])
 
 
 def val_set(examples: list[Example], decider, seed: int, max_val: int) -> list[Item]:
@@ -646,30 +669,39 @@ def run_eval(a) -> None:
     rank, device = 0, ("cuda:0" if torch.cuda.is_available() else "cpu")
     if world > 1:
         rank, world, device = _dist()
-    if len(a.data) != len(a.out):
-        raise SystemExit(f"--data ({len(a.data)}) and --out ({len(a.out)}) must pair up")
+    if len(a.data) != len(a.out) or (a.preds and len(a.preds) != len(a.data)):
+        raise SystemExit(f"--data ({len(a.data)}), --out ({len(a.out)}) and --preds must pair up")
     # one model load for every set (30 Oct 2026: a load per set cost ~3 min each, ~half of the evaluation time)
     decider = D3Decider.load(a.d3, adapter=a.adapter, load_in_4bit=_precision(a), device=device)
     decider.backbone.eval()
-    for data, out_path in zip(a.data, a.out):
+    for i, (data, out_path) in enumerate(zip(a.data, a.out)):
         examples = read_examples(data)
         source = a.label_source or ("gold" if any("gold" in ex.labels for ex in examples) else "final")
         items = build_items(examples, decider, source, None)
+        preds = [] if a.preds else None
         report = {"model": "pusula-d3" if a.adapter else "d3-base", "adapter": a.adapter, "data": data,
-                  "reference": source, **evaluate(decider, items, a.token_budget, rank, world, dist if world > 1 else None)}
+                  "reference": source,
+                  **evaluate(decider, items, a.token_budget, rank, world, dist if world > 1 else None, preds)}
         if rank != 0:
             continue
+        # atomic: a run cut while writing must not leave a partial file that the next run takes as done;
+        # predictions first, so a finished report means its predictions are there too
+        if preds is not None:
+            _write_atomic(Path(a.preds[i]), "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in preds))
         out = Path(out_path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        # atomic: a run cut while writing must not leave a partial report that the next run takes as done
-        tmp = out.with_name(out.name + ".tmp")
-        tmp.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(out)
+        _write_atomic(out, json.dumps(report, ensure_ascii=False, indent=2))
         console.print(f"EVAL_DONE {out}")
         console.print_json(data=report)
     if world > 1:
         dist.barrier()  # rank 0 has written every report
         dist.destroy_process_group()
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
 
 
 def ddp_probe(dist, device: str, rank: int, world: int, mb: int = 256, small: int = 200) -> tuple[bool, float]:
@@ -768,6 +800,8 @@ def main(argv=None) -> None:
     e.add_argument("--token-budget", type=int, default=16384)
     e.add_argument("--out", required=True, nargs="+", help="one report per --data file, same order")
     e.add_argument("--precision", choices=["auto", "4bit", "bf16"], default="auto")
+    e.add_argument("--preds", nargs="+", default=None,
+                   help="optional: one JSONL of per-question predictions (keys, gold, pred, probabilities) per --data")
     c = sub.add_parser("check", help="CPU gate before a GPU run: build the items with the d3 tokenizer only")
     c.add_argument("--d3", required=True, help="d3 directory (only the tokenizer and decision_config.json are read)")
     c.add_argument("--data", default=None, help="training directory (train.jsonl / val.jsonl), built as `train` does")

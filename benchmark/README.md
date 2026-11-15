@@ -39,13 +39,23 @@ The benchmark is developed by Erenext's AI Lab.
 
 ## Results
 
-Accuracy (%) on this benchmark (19,861 questions):
+Macro accuracy (%) on this benchmark (19,861 questions): the accuracy of each of the 10 question types is computed
+separately, and the mean of these accuracies is reported.
 
 | Model | Accuracy |
 |---|---|
 | Decision 3.0 (`vllm-sr/d3`) | 88.5 |
-| **Pusula** | **92.6** |
-| Pusula Nano | 82.7 |
+| Pusula 1.0 | 92.6 |
+| **Pusula 2.0** | **92.0** |
+| Pusula Nano 1.0 | 82.7 |
+| **Pusula Nano 2.0** | **83.2** |
+
+- The per-question (micro) accuracy is lower, because the 115 custom questions (`ozel_soru`), which are answered
+  almost without error, carry less weight: 87.5 for Decision 3.0 and 91.4 for Pusula 2.0.
+- The Pusula 2.0 score follows the default release behavior (`PUSULA_OWN_BASE`): the custom questions are answered by
+  the base model with the adapter disabled. With the adapter enabled for every question, as in the evaluation command
+  below, Pusula 2.0 scores 92.2.
+- The Decision 3.0 and Pusula scores were measured in BF16.
 
 ## Format
 
@@ -67,5 +77,8 @@ Each question is a complete d3 `systemone` question, so any d3-compatible model 
 ```bash
 python -m pusula.d3train eval --d3 ~/d3 --data benchmark/tr_decision_bench_v1.jsonl --out base_d3.json
 ```
+
+`--preds base_d3_preds.jsonl` additionally writes one line per question in benchmark order (message id, question,
+option keys, gold key, predicted key and the probability of each option).
 
 This benchmark is intended for evaluation only and should not be used for training.
