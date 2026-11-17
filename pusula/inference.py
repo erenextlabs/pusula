@@ -166,7 +166,8 @@ class D3Engine(BaseEngine):
         self._lock = threading.Lock()
         # own_base: a question that is not one of Pusula's built-in questions (routing, template and agent questions)
         # is answered by the base Decision 3.0 (adapter off). 31 Oct 2026 measurement: on users' own questions in
-        # unseen sectors the base model scored higher than the fine-tuned adapters (92.8 vs 90.5 / 91.2).
+        # unseen sectors the base model scored higher than the fine-tuned adapters (92.8 vs 90.5 / 91.2). On the d3-ultra
+        # base (12 Nov 2026) the adapter scored higher on OffensEval (88.4 vs 87.9), so v2.1 loads with custom_base off.
         self.own_base = own_base
         # custom_base=False keeps own questions on the adapter; own_base then covers only the BASE_TEMPLATES
         self.custom_base = custom_base
@@ -191,14 +192,15 @@ class D3Engine(BaseEngine):
     def load(cls, base: str, adapter: Optional[str] = None, device: str = "cuda:0",
              load_in_4bit: Optional[bool] = None, own_base: Optional[bool] = None) -> "D3Engine":
         """`load_in_4bit=None` picks BF16 when the weights fit the GPU, else 4-bit (PUSULA_D3_4BIT overrides).
-        `own_base=None` reads PUSULA_OWN_BASE: "1" (default) own questions and the BASE_TEMPLATES are answered by the base
-        model; "templates" only the BASE_TEMPLATES (own questions keep the adapter); "0" the adapter answers everything.
-        A bool `own_base` keeps the "1" / "0" meaning."""
+        `own_base=None` reads PUSULA_OWN_BASE: "templates" (default since v2.1) only the BASE_TEMPLATES are answered by the
+        base model and own questions keep the adapter; "1" (the v2.0 default) own questions and the BASE_TEMPLATES go to the
+        base model; "0" the adapter answers everything. A bool `own_base` keeps the "1" / "0" meaning."""
         from .d3model import D3Decider
 
         custom_base = True
         if own_base is None:   # read before the weights load, so a wrong value fails at once
-            mode = os.environ.get("PUSULA_OWN_BASE", "1").strip().lower()   # v2.0 default "1" (user decision, 31 Oct 2026)
+            # v2.1 default "templates": own questions on the adapter (user decision, 12 Nov 2026); v2.0 used "1" (31 Oct 2026)
+            mode = os.environ.get("PUSULA_OWN_BASE", "templates").strip().lower()
             if mode not in OWN_BASE_MODES:
                 raise ValueError(f"PUSULA_OWN_BASE must be one of {', '.join(OWN_BASE_MODES)}, not {mode!r}")
             own_base, custom_base = mode != "0", mode != "templates"

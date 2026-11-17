@@ -134,7 +134,8 @@ def test_templates_mode_keeps_own_questions_on_adapter():
     assert res["eksik_bilgi"]["noul"] < 0.5 and res["kendi_sorum"]["noul"] > 0.5
 
 
-@pytest.mark.parametrize("mode,own,custom", [("1", True, True), ("templates", True, False), ("0", False, True), (" Templates ", True, False)])
+@pytest.mark.parametrize("mode,own,custom", [("1", True, True), ("templates", True, False), ("0", False, True), (" Templates ", True, False),
+                                              (None, True, False)])   # unset: v2.1 default, own questions keep the adapter
 def test_load_reads_own_base_mode(monkeypatch, mode, own, custom):
     import pusula.d3model as d3m
 
@@ -142,7 +143,10 @@ def test_load_reads_own_base_mode(monkeypatch, mode, own, custom):
         backbone = type("B", (), {"eval": lambda self: None})()
 
     monkeypatch.setattr(d3m.D3Decider, "load", classmethod(lambda cls, *a, **k: Dec()))
-    monkeypatch.setenv("PUSULA_OWN_BASE", mode)
+    if mode is None:
+        monkeypatch.delenv("PUSULA_OWN_BASE", raising=False)
+    else:
+        monkeypatch.setenv("PUSULA_OWN_BASE", mode)
     eng = D3Engine.load("/nonexistent/base", adapter="/nonexistent/adapter")
     assert (eng.own_base, eng.custom_base) == (own, custom)
 
