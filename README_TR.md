@@ -47,7 +47,8 @@ Her iki model de aynı istekleri kabul eder.
 
 ## Sonuçlar
 
-Doğruluk (%). Değerlendirme etiketleri, birbirinden bağımsız ve kör çalışan iki etiketçi (Claude Opus 5.5 ve
+Doğruluk (%), makro ortalama olarak verilmiştir: doğruluk her adlandırılmış soru için (örneğin `alan` veya
+`aciliyet`) ayrı hesaplanmış ve bu doğrulukların ortalaması alınmıştır. Değerlendirme etiketleri, birbirinden bağımsız ve kör çalışan iki etiketçi (Claude Opus 5.5 ve
 Claude Sonnet 5.5) tarafından atanmış; ayrışmalar hakem tarafından karara bağlanmıştır. Tüm etiketler yayımlanan
 [etiketleme politikasına](pusula/data/label_policy.md) uygundur. Gerçek müşteri mesajları, aynı politika
 çerçevesinde Claude tarafından kör olarak etiketlenmiştir. Değerlendirme etiketleri yalnızca ölçüm amacıyla

@@ -47,7 +47,8 @@ Both models accept identical requests.
 
 ## Results
 
-Accuracy (%). Evaluation labels were assigned blind and independently by two annotators (Claude Opus 5.5 and
+Accuracy (%), reported as a macro average: accuracy is computed separately for each named question (for example
+`alan` or `aciliyet`), and the mean of these accuracies is reported. Evaluation labels were assigned blind and independently by two annotators (Claude Opus 5.5 and
 Claude Sonnet 5.5); disagreements were adjudicated, and all labels follow the published
 [labeling policy](pusula/data/label_policy.md). The real customer messages were labeled blind by Claude under the same
 policy. Evaluation labels are used exclusively for evaluation and are never used as training labels.
