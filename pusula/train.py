@@ -10,7 +10,6 @@ After training, one temperature per question type is fitted on the validation sp
 from __future__ import annotations
 
 import argparse
-import ctypes
 import json
 import random
 import shutil
@@ -22,7 +21,7 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
-from .d3train import floor_problems, parse_floors, risky_shares
+from .d3train import _recover, _swap_in, floor_problems, parse_floors, risky_shares
 from .jsonl import read_examples
 from .llm import console
 from .model import BASE_MODEL, PairEncoder, PusulaModel
@@ -225,6 +224,7 @@ def train(args) -> None:
     init, save_every, max_steps = getattr(args, "init", None), getattr(args, "save_every", 0), getattr(args, "max_steps", 0)
     total_steps = getattr(args, "total_steps", 0)  # run length: the LR schedule ends here and the run finishes normally
     ckpt = out / "ckpt"
+    _recover(ckpt)  # a save cut between the two renames leaves ckpt.old complete; a half-written ckpt.tmp is dropped
     resume = getattr(args, "resume", False) and ckpt.exists()
     source = ckpt if resume else init
     if source:
@@ -267,7 +267,7 @@ def train(args) -> None:
         log.truncate()
 
     def checkpoint(done: bool = False) -> None:
-        """Publish a complete checkpoint with a Linux atomic directory exchange."""
+        """Publish a complete checkpoint; a kill at any point leaves ckpt or ckpt.old complete (same path as d3train, every OS)."""
         tmp = out / "ckpt.tmp"
         shutil.rmtree(tmp, ignore_errors=True)
         saved = dict(optimizer=opt.state_dict(), scheduler=sched.state_dict(), epoch=epoch,
@@ -276,13 +276,7 @@ def train(args) -> None:
                      running=running, done=done, log_position=log.tell())
         model.save(tmp, tokenizer, args.max_length)
         torch.save(saved, tmp / "trainer.pt")
-        if ckpt.exists():
-            libc = ctypes.CDLL(None, use_errno=True)
-            if libc.renameat2(-100, bytes(tmp), -100, bytes(ckpt), 2) != 0:  # RENAME_EXCHANGE
-                raise OSError(ctypes.get_errno(), "checkpoint exchange failed")
-            shutil.rmtree(tmp)
-        else:
-            tmp.replace(ckpt)
+        _swap_in(tmp, ckpt)
 
     for epoch in range(state["epoch"] if state else 1, args.epochs + 1):
         model.train()

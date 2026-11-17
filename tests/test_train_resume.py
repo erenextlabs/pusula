@@ -92,3 +92,22 @@ def test_total_steps_ends_schedule_and_resumes(pilot, tmp_path, total, stop):
     assert (full / "val_metrics.json").read_text() == (resumed / "val_metrics.json").read_text()
     T.main([*pilot, "--out", str(resumed), "--total-steps", str(total), "--resume"])   # finished run: no further steps
     assert torch.load(resumed / "ckpt" / "trainer.pt", map_location="cpu", weights_only=False)["step"] == total
+
+
+def test_resume_after_cut_save(pilot, tmp_path):
+    """A kill between the two renames of the checkpoint swap leaves only ckpt.old, plus a half-written ckpt.tmp: --resume
+    restores ckpt.old and replays exactly. The swap is plain renames, so this runs the same on Linux and macOS."""
+    full, resumed = tmp_path / "full", tmp_path / "resumed"
+    T.main([*pilot, "--out", str(full)])
+    T.main([*pilot, "--out", str(resumed), "--max-steps", "4"])
+    (resumed / "ckpt").rename(resumed / "ckpt.old")
+    (resumed / "ckpt.tmp").mkdir()
+    (resumed / "ckpt.tmp" / "trainer.pt").write_bytes(b"cut")
+    T.main([*pilot, "--out", str(resumed), "--resume"])
+    assert not (resumed / "ckpt.old").exists() and not (resumed / "ckpt.tmp").exists()
+    for name in ("ckpt", "best"):
+        a, _, _ = PusulaModel.load(full / name)
+        b, _, _ = PusulaModel.load(resumed / name)
+        for key, weight in a.state_dict().items():
+            assert torch.allclose(weight, b.state_dict()[key], atol=1e-6, rtol=0)
+    assert (full / "train_log.jsonl").read_text() == (resumed / "train_log.jsonl").read_text()
