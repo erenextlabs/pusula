@@ -2,7 +2,9 @@
 
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="site/brand/pusula-logo-reverse.svg"><img src="site/brand/pusula-logo.svg" alt="Pusula" width="300"></picture></h1>
 
-### İlk Türkçe tam donanımlı karar modeli
+### Decision 3.0'dan uyarlanmış Türkçe karar modeli
+
+Eğitimde kullanılmamış 500 lisanslı gerçek müşteri mesajında Pusula 2.0 için %90,6, temel Decision 3.0 için %84,0 doğruluk ölçülmüştür.
 
 [English](README.md) • [Türkçe](README_TR.md) • [Web sitesi](https://erenextlabs.github.io/pusula/tr/)
 
@@ -15,7 +17,7 @@
 
 Karar modelleri, bir metin hakkında tanımlı sorulara (örneğin bir kaydın hangi ekibe yönlendirileceği, metnin bir
 prompt enjeksiyonu içerip içermediği ya da ne kadar acil olduğu) cevap verir ve metin üretmek yerine **her seçenek
-için bir olasılık** döndürür. Mevcut karar modelleri (Decision 3.0, Jev, Laya ve diğerleri) İngilizce için
+için bir olasılık** döndürür. Yaygın karar modelleri (Decision 3.0, Jev, Laya ve diğerleri) öncelikle İngilizce için
 geliştirilmiştir ve Türkçedeki doğrulukları sınırlıdır. **Pusula, Türkçeye uyarlanmış Decision 3.0'dır.**
 
 - **Önce Türkçe.** [vllm-sr/d3](https://huggingface.co/vllm-sr/d3) (Decision 3.0); bankacılık, muhasebe ve vergi,
@@ -518,7 +520,7 @@ Pusula'nın bir araştırmada veya üründe kullanılması durumunda aşağıdak
 
 ```bibtex
 @software{pusula2026,
-  title   = {Pusula: The First Full-Featured Turkish Decision Model},
+  title   = {Pusula: A Turkish Decision Model Adapted from Decision 3.0},
   author  = {Şahin, Hasan and Sayman, Ahmet},
   year    = {2026},
   version = {2.0},
