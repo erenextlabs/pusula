@@ -2,7 +2,9 @@
 
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="site/brand/pusula-logo-reverse.svg"><img src="site/brand/pusula-logo.svg" alt="Pusula" width="300"></picture></h1>
 
-### The first full-featured Turkish decision model
+### A Turkish decision model adapted from Decision 3.0
+
+On 500 held-out, licensed real customer messages, an accuracy of 90.6% was measured for Pusula 2.0 and 84.0% for the base Decision 3.0.
 
 [English](README.md) • [Türkçe](README_TR.md) • [Website](https://erenextlabs.github.io/pusula/en/)
 
@@ -15,7 +17,7 @@
 
 Decision models answer typed questions about a text (for example, which team should handle a ticket, whether it
 contains a prompt injection, or how urgent it is) and return a **probability for every option** instead of
-generated text. Existing decision models (Decision 3.0, Jev, Laya and others) were developed for English, and their
+generated text. Widely used decision models (Decision 3.0, Jev, Laya and others) were developed primarily for English, and their
 accuracy on Turkish is limited. **Pusula is Decision 3.0 adapted to Turkish.**
 
 - **Turkish first.** [vllm-sr/d3](https://huggingface.co/vllm-sr/d3) (Decision 3.0) has been fine-tuned on Turkish
@@ -518,7 +520,7 @@ in [`CITATION.cff`](CITATION.cff) and through the "Cite this repository" button 
 
 ```bibtex
 @software{pusula2026,
-  title   = {Pusula: The First Full-Featured Turkish Decision Model},
+  title   = {Pusula: A Turkish Decision Model Adapted from Decision 3.0},
   author  = {Şahin, Hasan and Sayman, Ahmet},
   year    = {2026},
   version = {2.0},
