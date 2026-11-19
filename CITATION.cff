@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If Pusula is used in research or in a product, please cite it as below."
-title: "Pusula: A Turkish Decision Model Adapted from Decision 3.0"
+title: "Pusula: A Full-Featured Decision Model Built for Turkish"
 abstract: >-
   Pusula is a Turkish decision model family: Pusula (a Turkish-trained LoRA adapter on vllm-sr/d3) and Pusula Nano
   (a TabiBERT cross-encoder).

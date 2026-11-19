@@ -2,7 +2,7 @@
 
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="site/brand/pusula-logo-reverse.svg"><img src="site/brand/pusula-logo.svg" alt="Pusula" width="300"></picture></h1>
 
-### A Turkish decision model adapted from Decision 3.0
+### A Full-Featured Decision Model Built for Turkish
 
 On 500 held-out, licensed real customer messages, an accuracy of 90.6% was measured for Pusula 2.0 and 84.0% for the base Decision 3.0.
 
@@ -518,7 +518,7 @@ in [`CITATION.cff`](CITATION.cff) and through the "Cite this repository" button 
 
 ```bibtex
 @software{pusula2026,
-  title   = {Pusula: A Turkish Decision Model Adapted from Decision 3.0},
+  title   = {Pusula: A Full-Featured Decision Model Built for Turkish},
   author  = {Şahin, Hasan and Sayman, Ahmet},
   year    = {2026},
   version = {2.0},

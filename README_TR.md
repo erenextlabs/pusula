@@ -2,7 +2,7 @@
 
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="site/brand/pusula-logo-reverse.svg"><img src="site/brand/pusula-logo.svg" alt="Pusula" width="300"></picture></h1>
 
-### Decision 3.0'dan uyarlanmış Türkçe karar modeli
+### Türkçe İçin Geliştirilmiş Tam Kapsamlı Karar Modeli
 
 Eğitimde kullanılmamış 500 lisanslı gerçek müşteri mesajında Pusula 2.0 için %90,6, temel Decision 3.0 için %84,0 doğruluk ölçülmüştür.
 
@@ -520,7 +520,7 @@ Pusula'nın bir araştırmada veya üründe kullanılması durumunda aşağıdak
 
 ```bibtex
 @software{pusula2026,
-  title   = {Pusula: A Turkish Decision Model Adapted from Decision 3.0},
+  title   = {Pusula: A Full-Featured Decision Model Built for Turkish},
   author  = {Şahin, Hasan and Sayman, Ahmet},
   year    = {2026},
   version = {2.0},
