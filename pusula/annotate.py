@@ -41,6 +41,7 @@ PRICES = {
 }
 META_KEYS = ("confidence", "drop", "note")
 KEY_FILE = Path.home() / ".pusula_anthropic_key"
+EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 
 
 def cost(model: str, usage: dict[str, int], batch: bool = False, ttl: str = "5m") -> float:
@@ -256,7 +257,8 @@ def run_requests(jobs: list[tuple[Example, str]], model: str, system: str, out_p
                 print(f"[hata] {ex.id}: {type(e).__name__}: {e}", flush=True)
                 return
             usd = cost(model, usage)
-            ledger.add({"ts": time.time(), "task": task, "model": model, "id": ex.id, "usage": usage, "cost": usd})
+            ledger.add({"ts": time.time(), "task": task, "model": model, "effort": effort, "id": ex.id, "usage": usage,
+                        "cost": usd})
             out = parse_json(text)
             labels, errors = check(ex, out) if out else ({}, [f"json yok ({stop_reason})"])
             row = _row(ex.id, model, labels, out, errors, usage, usd, task)
@@ -309,8 +311,8 @@ def run_batch(jobs: list[tuple[Example, str]], model: str, system: str, out_path
         msg = r.result.message
         usage = _usage(msg.usage)
         usd = cost(model, usage, batch=True, ttl="1h")
-        ledger.add({"ts": time.time(), "task": task, "model": model, "id": ex.id, "usage": usage, "cost": usd,
-                    "batch": batch_id})
+        ledger.add({"ts": time.time(), "task": task, "model": model, "effort": effort, "id": ex.id, "usage": usage,
+                    "cost": usd, "batch": batch_id})
         out = parse_json(_text(msg))
         labels, errors = validate(tax, ex, out) if out else ({}, ["json yok"])
         writer.write(_row(ex.id, model, labels, out, errors, usage, usd, task, {"batch": batch_id}))
@@ -348,7 +350,7 @@ def label(a) -> None:
     system = extras_system_prompt() if only_extras else system_prompt()
     jobs = [(ex, user_prompt(ex)) for ex in todo]
     ledger = Ledger(a.ledger, a.cap)
-    print(f"{len(jobs)} mesaj · {a.model} · harcama şimdiye dek ${ledger.total:.2f} / tavan ${a.cap:.2f}", flush=True)
+    print(f"{len(jobs)} mesaj · {a.model} · efor {a.effort} · harcama şimdiye dek ${ledger.total:.2f} / tavan ${a.cap:.2f}", flush=True)
     if a.batch and not only_extras:
         run_batch(jobs, a.model, system, a.out, ledger, a.effort, task=a.task)
     else:
@@ -643,7 +645,8 @@ def main(argv=None) -> None:
 
     def common(s):
         s.add_argument("--model", default="claude-sonnet-5-5", choices=sorted(PRICES))
-        s.add_argument("--effort", default=None, help="low | medium | high (default: the model's own)")
+        s.add_argument("--effort", default="xhigh", choices=EFFORTS,
+                       help="thinking depth, written to the ledger (default: xhigh, the server standard)")
         s.add_argument("--workers", type=int, default=8)
         s.add_argument("--ledger", default="runs/api/spend.jsonl")
         s.add_argument("--cap", type=float, default=120.0, help="stop before the ledger total reaches this (USD)")
