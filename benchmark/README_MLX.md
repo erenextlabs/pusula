@@ -5,12 +5,52 @@
 once and applies the Pusula adapter at run time. The same converted model answers with the adapter on (Pusula) or
 off (base Decision 3.0), so the `own_base` routing of the published setup is kept.
 
-Results on this benchmark will be added when the 4, 6 and 8-bit runs are complete.
+## MLX results (4, 6 and 8-bit)
+
+Full [Turkish Decision Benchmark](README.md) (19,861 questions), on an Apple M3 Max with 36 GB unified memory.
+Micro accuracy / macro accuracy / ECE (15 bins), computed as `d3train eval` computes them. The published BF16
+results in the main README are unchanged; the GPU BF16 row below is the same evaluation on a GPU, for comparison.
+
+| run | weights | base Decision 3.0 | Pusula | Pusula gain (micro) |
+|---|---|---|---|---|
+| MLX 4-bit | 14.4 GB | 86.92 / 88.08 / 0.009 | 91.39 / 92.20 / 0.032 | +4.47 |
+| MLX 6-bit | 20.9 GB | 87.48 / 88.50 / 0.011 | 91.42 / 92.23 / 0.031 | +3.94 |
+| MLX 8-bit | 27.3 GB | 87.44 / 88.47 / 0.008 | 91.38 / 92.20 / 0.032 | +3.94 |
+| GPU BF16 | | 87.50 / 88.52 / 0.009 | 91.41 / 92.22 / 0.031 | +3.91 |
+
+Accuracy per question type (base Decision 3.0 / Pusula):
+
+| question | MLX 4-bit | MLX 6-bit | MLX 8-bit | GPU BF16 |
+|---|---|---|---|---|
+| aciliyet | 76.25 / 82.86 | 76.21 / 83.41 | 76.16 / 83.32 | 76.44 / 83.23 |
+| alan | 89.52 / 90.47 | 90.06 / 90.47 | 90.02 / 90.57 | 89.97 / 90.47 |
+| alt_alan | 93.76 / 93.89 | 93.85 / 93.89 | 93.85 / 93.89 | 93.80 / 93.94 |
+| duygu | 68.23 / 85.82 | 71.38 / 86.24 | 70.88 / 86.05 | 71.38 / 86.28 |
+| eylem_gerekli | 87.92 / 90.88 | 89.11 / 90.84 | 89.20 / 90.66 | 89.20 / 90.75 |
+| guvenlik | 96.81 / 99.18 | 97.40 / 99.32 | 97.58 / 99.32 | 97.54 / 99.27 |
+| insana_devret | 77.85 / 84.78 | 77.03 / 83.82 | 77.12 / 83.77 | 77.12 / 83.87 |
+| kisisel_veri | 93.44 / 96.17 | 93.71 / 96.22 | 93.66 / 96.31 | 93.57 / 96.26 |
+| niyet | 97.90 / 97.99 | 97.99 / 98.09 | 97.95 / 98.09 | 97.90 / 98.13 |
+| ozel_soru | 99.13 / 100.00 | 98.26 / 100.00 | 98.26 / 100.00 | 98.26 / 100.00 |
+
+- 6-bit and 8-bit give the same results as GPU BF16: micro and macro within 0.06 points, each question type within 0.5
+  points. Between 6-bit and 8-bit there is no difference (paired z −0.68 for base Decision 3.0, −1.02 for Pusula).
+- 4-bit gives the same results for Pusula. Base Decision 3.0 loses about 0.5 points at 4-bit (8-bit minus 4-bit
+  +0.52, paired z 5.3), mostly on `duygu` and `eylem_gerekli`. This makes the Pusula gain look larger at 4-bit.
+- One question type differs at 4-bit: Pusula `insana_devret` is 84.78 at 4-bit and 83.77 at 8-bit (exact McNemar
+  p 0.0005); 6-bit and 8-bit agree with GPU BF16 there.
+- Pusula answers every question with the adapter on, which is the v2.1 default (`PUSULA_OWN_BASE=templates`; the
+  benchmark has no `eksik_bilgi` question). With the v2.0 setting (`ozel_soru` answered by base Decision 3.0, as
+  in the published 92.0) the macro accuracy is 92.12 at 4-bit, 92.06 at 6-bit and 92.02 at 8-bit.
+- Speed on the M3 Max, base Decision 3.0: 172 (4-bit), 162 (6-bit) and 161 (8-bit) prompt tokens/s. A full run
+  takes about 14 hours for base Decision 3.0 and about 16 hours for Pusula at 4 and 6-bit.
+- Memory: peak memory footprint of the Pusula run is 20.9 GB (4-bit), 26.8 GB (6-bit, token budget 4096) and
+  30.8 GB (8-bit, token budget 1024), with the default 2 GB buffer cache limit (100 questions, `/usr/bin/time -l`).
 
 ## Requirements
 
-- An Apple silicon Mac. A 36 GB machine runs 4 and 6-bit. 8-bit (about 27 GB of weights) is at the limit and uses a
-  smaller token budget.
+- An Apple silicon Mac. A 36 GB machine runs all three bit levels (measured on an M3 Max). Smaller machines were
+  not measured. 8-bit uses a token budget of 1024 (`scripts/mlx_bench.sh` sets it).
 - The MLX extra:
 
   ```
@@ -104,8 +144,7 @@ nohup bash scripts/mlx_bench.sh 4bit-base 4bit-pusula > ~/models/mlx_bench.out 2
 bash scripts/mlx_bench.sh status
 ```
 
-A full benchmark run (19,861 questions) takes about 14 hours for base Decision 3.0 and about 16 hours for Pusula at
-4-bit on an M3 Max.
+Times and speeds are in [MLX results](#mlx-results-4-6-and-8-bit).
 
 ## Checks
 
