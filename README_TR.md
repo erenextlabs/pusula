@@ -513,7 +513,7 @@ Pusula, Erenext's AI Lab tarafından geliştirilmektedir. Katkıda bulunanlar a�
 | Ad | Rol | GitHub | Hugging Face |
 |---|---|---|---|
 | Hasan Şahin | Proje yürütücüsü | [hsnsahinhsn](https://github.com/hsnsahinhsn) | [hsnsahinhsn](https://huggingface.co/hsnsahinhsn) |
-| Ahmet Sayman | Katkıda bulunan | [asayman](https://github.com/asayman) | [asaymantr](https://huggingface.co/asaymantr) |
+| Ahmet Sayman | Katkıda bulunan | [asayman](https://github.com/asayman) | [saymanlabs](https://huggingface.co/saymanlabs) |
 
 Katkı kuralları [`CONTRIBUTING.md`](CONTRIBUTING.md) dosyasında yer almaktadır.
 
