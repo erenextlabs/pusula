@@ -33,12 +33,15 @@ Accuracy per question type (base Decision 3.0 / Pusula):
 | niyet | 97.90 / 97.99 | 97.99 / 98.09 | 97.95 / 98.09 | 97.90 / 98.13 |
 | ozel_soru | 99.13 / 100.00 | 98.26 / 100.00 | 98.26 / 100.00 | 98.26 / 100.00 |
 
-- 6-bit and 8-bit give the same results as GPU BF16: micro and macro within 0.06 points, each question type within 0.5
-  points. Between 6-bit and 8-bit there is no difference (paired z −0.68 for base Decision 3.0, −1.02 for Pusula).
-- 4-bit gives the same results for Pusula. Base Decision 3.0 loses about 0.5 points at 4-bit (8-bit minus 4-bit
-  +0.52, paired z 5.3), mostly on `duygu` and `eylem_gerekli`. This makes the Pusula gain look larger at 4-bit.
+- 6-bit and 8-bit are within 0.06 points of GPU BF16 (micro and macro) and within 0.5 points per question type.
+  Between 6-bit and 8-bit the paired difference is not significant (paired z −0.68 for base Decision 3.0, −1.02 for
+  Pusula).
+- At 4-bit, Pusula micro and macro accuracy are within 0.02 points of GPU BF16. Base Decision 3.0 loses about 0.5
+  points at 4-bit (8-bit minus 4-bit +0.52, paired z 5.3), mostly on `duygu` and `eylem_gerekli`. This makes the
+  Pusula gain look larger at 4-bit.
 - One question type differs at 4-bit: Pusula `insana_devret` is 84.78 at 4-bit and 83.77 at 8-bit (exact McNemar
-  p 0.0005); 6-bit and 8-bit agree with GPU BF16 there.
+  p 0.0005); 6-bit and 8-bit are within 0.1 points of GPU BF16 there.
+- Per-question agreement with GPU BF16 has not been measured yet.
 - Pusula answers every question with the adapter on, which is the v2.1 default (`PUSULA_OWN_BASE=templates`; the
   benchmark has no `eksik_bilgi` question). With the v2.0 setting (`ozel_soru` answered by base Decision 3.0, as
   in the published 92.0) the macro accuracy is 92.12 at 4-bit, 92.06 at 6-bit and 92.02 at 8-bit.
