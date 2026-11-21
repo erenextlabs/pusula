@@ -60,10 +60,11 @@ run_one() {
 
   if [[ -f "$OUT/$n.json" ]]; then log "$n already done, skipped"; return; fi
 
-  # config.json is written last by convert, so it marks a complete conversion.
-  if [[ ! -f "$mlx/config.json" ]]; then
+  # convert writes into $mlx.partial and renames it only when every required file is there;
+  # a directory that still lacks one (made by an older convert) is converted again.
+  if ! "$PY" -I -c 'import sys; from pusula.mlx_d3 import missing_files; sys.exit(1 if missing_files(sys.argv[1]) else 0)' "$mlx"; then
     log "converting d3 to ${bits}-bit: $mlx"
-    rm -rf "$mlx"
+    rm -rf "$mlx" "$mlx.partial"
     caffeinate -i "$PY" -m pusula.mlx_d3 convert --d3 "$MODELS/d3" --out "$mlx" --bits "$bits"
   fi
 

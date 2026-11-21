@@ -12,7 +12,9 @@ benchmark order (messages in file order, then the `labels.gold` keys of each mes
 the benchmark: the question name and the gold key must match.
 
 `compare` reads either format, keeps the questions that both files contain, and prints the paired table of
-`mlx_d3.paired` plus how often the two runs give the same answer. This module does not load a model and does not
+`mlx_d3.paired` plus how often the two runs give the same answer. The answer of a d3train row is its recorded `pred`
+(accuracy, agreement and the McNemar counts); its 5-digit `p` values are used only for probability differences and
+ECE, because two options can round to the same value. This module does not load a model and does not
 change `mlx_d3`, so it is safe to use while an MLX run is going.
 """
 from __future__ import annotations
@@ -59,8 +61,9 @@ def export_rows(rows: dict[int, dict], items: list[dict]) -> list[dict]:
 
 
 def load_any(path: str, items: Optional[list[dict]] = None) -> dict[int, dict]:
-    """A preds file of either format as MLX rows {i, name, label, probs}. A d3train row is checked against the
-    benchmark when `items` is given (same id, question and option keys)."""
+    """A preds file of either format as MLX rows {i, name, label, probs}; a d3train row also keeps its recorded answer
+    as `pred` (an option index, see mlx_d3._pred). A d3train row is checked against the benchmark when `items` is
+    given (same id, question and option keys)."""
     rows = {}
     text = Path(path).read_text(encoding="utf-8")
     if text and not text.endswith("\n"):
@@ -70,17 +73,19 @@ def load_any(path: str, items: Optional[list[dict]] = None) -> dict[int, dict]:
             continue
         r = json.loads(line)
         if "item" in r:  # d3train eval --preds
-            keys, gold = [str(k) for k in r["keys"]], str(r["gold"])
+            keys, gold, pred = [str(k) for k in r["keys"]], str(r["gold"]), str(r["pred"])
             prob = dict(zip(keys, r["p"]))  # probabilities are read by option name, never by position
-            if len(prob) != len(keys) or len(keys) != len(r["p"]) or gold not in prob:
-                raise SystemExit(f"{path}: item {r['item']}: keys {keys}, gold {gold!r} and p do not fit together")
+            if len(prob) != len(keys) or len(keys) != len(r["p"]) or gold not in prob or pred not in prob:
+                raise SystemExit(f"{path}: item {r['item']}: keys {keys}, gold {gold!r}, pred {pred!r} and p do not "
+                                 "fit together")
             if items is not None:
                 it = items[r["item"]]
                 if (r["id"], r["q"], str(it["gold"])) != (it["id"], it["q"], gold) or set(keys) != set(it["keys"]):
                     raise SystemExit(f"{path}: item {r['item']} is ({r['id']}, {r['q']}, gold {gold!r}, {keys}), the "
                                      f"benchmark has ({it['id']}, {it['q']}, gold {it['gold']!r}, {it['keys']})")
                 keys = it["keys"]  # benchmark (schema) order, so both files use the same label index
-            row = {"i": r["item"], "name": r["q"], "label": keys.index(gold), "probs": [prob[k] for k in keys]}
+            row = {"i": r["item"], "name": r["q"], "label": keys.index(gold), "probs": [prob[k] for k in keys],
+                   "pred": keys.index(pred)}
         else:
             row = r
             if items is not None:
@@ -95,7 +100,7 @@ def agreement(a: dict[int, dict], b: dict[int, dict]) -> dict:
     per: dict[str, list[tuple[int, float]]] = defaultdict(list)
     for i in sorted(a):
         pa, pb = a[i]["probs"], b[i]["probs"]
-        same = int(max(range(len(pa)), key=pa.__getitem__) == max(range(len(pb)), key=pb.__getitem__))
+        same = int(mlx_d3._pred(a[i]) == mlx_d3._pred(b[i]))
         per[a[i]["name"]].append((same, max(abs(x - y) for x, y in zip(pa, pb))))
 
     def block(v: list[tuple[int, float]]) -> dict:

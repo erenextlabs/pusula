@@ -64,7 +64,9 @@ Accuracy per question type (base Decision 3.0 / Pusula):
 
 ## How it works
 
-- `convert` quantizes the d3 text backbone once (MLX affine quantization, group size 64).
+- `convert` quantizes the d3 text backbone once (MLX affine quantization, group size 64). It writes into
+  `<out>.partial` and renames it to `<out>` only when the weights, `config.json`, the tokenizer, `decision_config.json`,
+  `readout.safetensors`, `LICENSE` and `NOTICE` are all there, so an interrupted conversion never looks complete.
 - The LoRA adapter is applied at run time in full precision on top of the quantized weights, as on the GPU 4-bit
   path (NF4 base and LoRA). A switch turns it off. With the adapter switched off, the model gives exactly the
   probabilities of base d3.
@@ -93,7 +95,15 @@ python -m pusula.mlx_d3 eval --mlx ~/models/d3-mlx-4bit --adapter ~/models/pusul
 
 Each run writes a report (`<run>.json`: accuracy per question type, micro and macro accuracy, ECE, speed) and one
 prediction line per question (`<run>.preds.jsonl`). Runs are resumable: a run that stops continues from the
-questions already in its `.preds.jsonl` file. The `local/` folder is not in git.
+questions already in its `.preds.jsonl` file. Next to it, `<run>.preds.run.json` records what fixes the run (model
+path and bits, adapter, sha256 of the data file, `--base`, `--limit`, `--seed`); a run with other settings on the same
+file stops with an error instead of mixing rows, and so does a preds file with duplicate rows or rows that are not
+questions of the run. A lock stops a second run on the same file. The `local/` folder is not in git.
+
+`eval` refuses a model whose `decision_config.json` it cannot run as the GPU path does: only
+`noncausal_full_attention` without a `prompt_layout` (vllm-sr/d3) is supported, so d3-ultra (`prefix_bidir`,
+`header-v1`) stops with an error, as does an adapter trained for another base model. A `temperature` other than 1.0
+is applied as on the GPU: to base answers (adapter off or not loaded).
 
 Useful options of `eval`:
 
@@ -107,7 +117,9 @@ Useful options of `eval`:
 
 The `own_base` routing (`PUSULA_OWN_BASE`), built from the two runs without loading a model. The default follows
 the v2.1 default `templates`: only the `eksik_bilgi` template is answered by base Decision 3.0, own questions keep
-the adapter. The benchmark has no `eksik_bilgi` question, so on the benchmark this equals the Pusula run.
+the adapter. As on the GPU, a question is recognized as the `eksik_bilgi` template by name or by content: `eval`
+marks each row (`base_template`) and `combine` uses the mark. The benchmark has no `eksik_bilgi` question, so on the
+benchmark this equals the Pusula run.
 `--base-questions ozel_soru eksik_bilgi` gives the v2.0 default (`1`, own questions on base Decision 3.0), which the
 published 92.0 used:
 
@@ -127,7 +139,8 @@ python -m pusula.mlx_d3 compare local/mlx/4bit-base.preds.jsonl local/mlx/4bit-p
 
 Comparison with GPU runs: `pusula.mlx_preds export` writes an MLX prediction file in the format of
 `d3train eval --preds`, and `pusula.mlx_preds compare` compares files of either format (matching rows, same answers,
-probability differences, McNemar test):
+probability differences, McNemar test). For a `d3train` file the answer is its recorded `pred`; the rounded `p`
+values are used only for probability differences and ECE, because two options can round to the same value:
 
 ```
 python -m pusula.mlx_preds export local/mlx/4bit-pusula.preds.jsonl \
@@ -139,7 +152,7 @@ python -m pusula.mlx_preds compare gpu-pusula.preds.jsonl local/mlx/4bit-pusula.
 ## Long runs
 
 `scripts/mlx_bench.sh` runs base Decision 3.0 and Pusula at each bit level one after another. It converts a model
-first when it is missing, restarts a run after a crash, and keeps the Mac awake (`caffeinate`). Reports go to
+first when it is missing or lacks a required file, restarts a run after a crash, and keeps the Mac awake (`caffeinate`). Reports go to
 `local/mlx/` (`OUT=` changes this).
 
 ```

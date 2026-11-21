@@ -15,6 +15,8 @@ Requires `pip install -e ".[mlx]"` on an Apple silicon Mac.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import hashlib
 import json
 import math
 import random
@@ -25,11 +27,17 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Optional, Sequence
 
-from .d3model import load_codes
+from .d3model import NONCAUSAL, adapter_format, load_format
 
 # files copied next to the MLX weights: tokenizer, d3 prompt contract and readout, licenses
 COPY_FILES = ("tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt", "chat_template.jinja",
               "decision_config.json", "readout.safetensors", "LICENSE", "NOTICE")
+# a converted directory is complete only with all of these (and at least one model*.safetensors)
+REQUIRED_FILES = ("config.json", "tokenizer.json", "tokenizer_config.json", "decision_config.json",
+                  "readout.safetensors", "LICENSE", "NOTICE")
+# own_base routing of v2.1 (PUSULA_OWN_BASE=templates): the questions inference.D3Engine.BASE_TEMPLATES sends to base
+# d3, recognized by name or by content. Kept here because pusula.inference imports torch; a test checks both match.
+BASE_TEMPLATES = ("eksik_bilgi",)
 _ADAPTER_KEY = re.compile(r"^(?:base_model\.model\.)?(?:model\.)?language_model\.(layers\.\d+\..+)\.lora_([AB])\.weight$")
 
 
@@ -70,14 +78,43 @@ def build_model(config: dict):
     return Model(ModelArgs.from_dict(config))
 
 
+def missing_files(mlx_dir: str | Path) -> list[str]:
+    """The files a complete `convert` output has and `mlx_dir` lacks (empty: the directory is complete)."""
+    path = Path(mlx_dir).expanduser()
+    missing = [name for name in REQUIRED_FILES if not (path / name).is_file()]
+    if not any(path.glob("model*.safetensors")):
+        missing.append("model*.safetensors")
+    return missing
+
+
 def convert(d3: str, out: str, bits: int, group_size: int = 64) -> Path:
+    """Convert into `<out>.partial`, check that every required file is there, then rename it to `out`: an interrupted
+    conversion never leaves a directory that looks complete."""
+    src, dst = Path(d3).expanduser(), Path(out).expanduser()
+    if dst.exists():
+        raise SystemExit(f"{dst} already exists: remove it first")
+    lacking = [name for name in REQUIRED_FILES[1:] if not (src / name).is_file()]
+    if lacking:
+        raise SystemExit(f"{src} lacks {', '.join(lacking)}")
+    load_format(src)  # a d3 format this module can read
+    tmp = dst.with_name(dst.name + ".partial")
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    _convert_into(src, tmp, bits, group_size)
+    missing = missing_files(tmp)
+    if missing:
+        raise SystemExit(f"conversion in {tmp} is incomplete, missing {', '.join(missing)}")
+    tmp.rename(dst)
+    return dst
+
+
+def _convert_into(src: Path, dst: Path, bits: int, group_size: int) -> None:
     import mlx.core as mx
     from mlx.utils import tree_flatten
     from mlx_lm.utils import quantize_model, save_config, save_model
 
     # Freed source buffers go back to the OS between shards instead of staying in MLX's cache.
     mx.set_cache_limit(0)
-    src, dst = Path(d3).expanduser(), Path(out).expanduser()
     config = _text_config(src)
     model = build_model(config)
     # No outside reference to the lazy bf16 source arrays: once a saved shard is evaluated its sources can
@@ -94,7 +131,6 @@ def convert(d3: str, out: str, bits: int, group_size: int = 64) -> Path:
     for name in COPY_FILES:
         if (src / name).is_file():
             shutil.copy(src / name, dst / name)
-    return dst
 
 
 # ---- model -----------------------------------------------------------------------------------------
@@ -155,7 +191,8 @@ def apply_adapter(model, adapter_dir: Path, switch: dict) -> int:
 class MLXDecider:
     """d3 on MLX with the same interface as d3model.D3Decider (tokenizer, codes, encode, logits) for evaluation."""
 
-    def __init__(self, model, readout, base_readout, tokenizer, codes: list[str], switch: dict, causal: bool = False):
+    def __init__(self, model, readout, base_readout, tokenizer, codes: list[str], switch: dict, causal: bool = False,
+                 base_temperature: float = 1.0, has_adapter: bool = False):
         self.model = model
         self.readout = readout            # [255, hidden] fp32
         self.base_readout = base_readout  # with an adapter: the base model's readout (logits(base=True))
@@ -164,13 +201,31 @@ class MLXDecider:
         self._switch = switch
         self.causal = causal              # debugging only: d3 is non-causal in its full-attention layers
         self.pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+        self.base_temperature = base_temperature  # as d3model.D3Decider: divides base answers (adapter off or absent)
+        self.has_adapter = has_adapter
+
+    @staticmethod
+    def check_format(path: Path, adapter: Optional[Path] = None):
+        """The model format of decision_config.json (d3model.load_format) when this module runs it as the GPU path does;
+        otherwise a ValueError, so a d3-ultra model or an adapter of another base never runs with the wrong prompt or mask."""
+        fmt = load_format(path)
+        if fmt.attention_mode != NONCAUSAL or fmt.layout is not None:
+            raise ValueError(f"{path}: attention mode {fmt.attention_mode!r} with prompt layout {fmt.layout!r} is not "
+                             f"supported on MLX yet (only {NONCAUSAL!r} without a prompt layout, as vllm-sr/d3)")
+        if adapter is not None and adapter_format(adapter) != (fmt.attention_mode, fmt.layout):
+            raise ValueError(f"adapter {adapter} was trained for {adapter_format(adapter)}, the base model at {path} is "
+                             f"{(fmt.attention_mode, fmt.layout)}: an adapter only fits its own base model")
+        return fmt
 
     @classmethod
     def load(cls, mlx_dir: str, adapter: Optional[str] = None, causal: bool = False) -> "MLXDecider":
+        path = Path(mlx_dir).expanduser()
+        adapter_dir = Path(adapter).expanduser() if adapter else None
+        fmt = cls.check_format(path, adapter_dir)
+
         import mlx.core as mx
         from transformers import AutoTokenizer
 
-        path = Path(mlx_dir).expanduser()
         config = json.loads((path / "config.json").read_text(encoding="utf-8"))
         model = build_model(config)
         if "quantization" in config:
@@ -191,13 +246,13 @@ class MLXDecider:
         switch = {"on": False}
         base_readout = mx.load(str(path / "readout.safetensors"))["weight"].astype(mx.float32)
         readout = base_readout
-        if adapter:
-            adapter_dir = Path(adapter).expanduser()
+        if adapter_dir is not None:
             apply_adapter(model, adapter_dir, switch)
             readout = mx.load(str(adapter_dir / "readout.safetensors"))["weight"].astype(mx.float32)
             switch["on"] = True
         tokenizer = AutoTokenizer.from_pretrained(str(path))
-        return cls(model, readout, base_readout if adapter else None, tokenizer, load_codes(path), switch, causal)
+        return cls(model, readout, base_readout if adapter_dir else None, tokenizer, fmt.codes, switch, causal,
+                   base_temperature=fmt.temperature, has_adapter=adapter_dir is not None)
 
     def encode(self, prompts: Sequence[str]) -> list[list[int]]:
         return self.tokenizer(list(prompts), add_special_tokens=False)["input_ids"]
@@ -234,6 +289,8 @@ class MLXDecider:
             k = max(counts)
             h = self.hidden(sequences).astype(mx.float32)
             out = h @ (self.base_readout if use_base else self.readout)[:k].T
+            if use_base or not self.has_adapter:
+                out = out / self.base_temperature
             mx.eval(out)
         finally:
             self._switch["on"] = on
@@ -266,10 +323,9 @@ def score(rows: list[dict], bins: int = 15) -> dict:
     per_q: dict[str, list[int]] = defaultdict(list)
     conf, ok_all = [], []
     for r in rows:
-        p = r["probs"]
-        ok = int(max(range(len(p)), key=p.__getitem__) == r["label"])
+        ok = int(_pred(r) == r["label"])
         per_q[r["name"]].append(ok)
-        conf.append(max(p))
+        conf.append(max(r["probs"]))
         ok_all.append(ok)
     acc = {k: round(sum(v) / len(v), 4) for k, v in sorted(per_q.items())}
     ece = 0.0
@@ -302,16 +358,22 @@ def _same_items(a: dict[int, dict], b: dict[int, dict]) -> None:
 
 def combine_own_base(adapter_rows: dict[int, dict], base_rows: dict[int, dict],
                      base_questions: Sequence[str] = ("eksik_bilgi",)) -> dict[int, dict]:
-    """The own_base setup from two runs: the questions in `base_questions` are answered by base d3 (adapter off),
-    every other question by the adapter. Valid because the adapter switched off is exactly base d3 (checked with
+    """The own_base setup from two runs: the questions in `base_questions`, and every question `eval` marked as a
+    BASE_TEMPLATES template by content (`base_template` in its row, the rule of inference.D3Engine._use_base), are
+    answered by base d3 (adapter off), every other question by the adapter. Valid because the adapter switched off is exactly base d3 (checked with
     `eval --base`, see benchmark/README_MLX.md). The default follows PUSULA_OWN_BASE=templates, the v2.1 default
     (inference.D3Engine._use_base): only the eksik_bilgi template goes to base d3. The v2.0 default ("1") also sends
     own questions there; on the benchmark that is `ozel_soru`, so it is ("ozel_soru", "eksik_bilgi")."""
     _same_items(adapter_rows, base_rows)
-    return {i: (base_rows[i] if r["name"] in base_questions else r) for i, r in adapter_rows.items()}
+    return {i: (base_rows[i] if r["name"] in base_questions or r.get("base_template") else r)
+            for i, r in adapter_rows.items()}
 
 
 def _pred(r: dict) -> int:
+    """The answer of a row: the recorded one when the file has it (d3train --preds rows, read by mlx_preds.load_any:
+    their rounded probabilities can tie), else the most likely option."""
+    if "pred" in r:
+        return r["pred"]
     p = r["probs"]
     return max(range(len(p)), key=p.__getitem__)
 
@@ -414,6 +476,88 @@ def _softmax(row) -> list[float]:
     return [v / s for v in e]
 
 
+def _sha256(path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def run_trace(a, source: str) -> dict:
+    """What fixes the rows of an `eval` run: a preds file is resumed only by a run with the same trace."""
+    mlx = Path(a.mlx).expanduser()
+    meta = json.loads((mlx / "config.json").read_text(encoding="utf-8")).get("pusula_mlx", {})
+    return {"mlx": shown_path(a.mlx), "bits": meta.get("bits"), "group_size": meta.get("group_size"),
+            "adapter": shown_path(a.adapter), "data_sha256": _sha256(a.data), "label_source": source,
+            "base": bool(a.base), "limit": a.limit or None, "seed": a.seed if a.limit else None, "causal": bool(a.causal)}
+
+
+def trace_path(preds: Path) -> Path:
+    return preds.with_name(preds.name.removesuffix(".jsonl") + ".run.json")
+
+
+def resume_rows(f, preds: Path, trace: dict, items: list, index: list[int]) -> dict[int, dict]:
+    """The rows already in the open, locked preds file `f`, checked against the run: same trace, every row once,
+    every row a question of this run. A partial last line (a run killed mid-write) is cut off."""
+    f.seek(0)
+    text = f.read()
+    tpath = trace_path(preds)
+    if text.strip():
+        if not tpath.is_file():
+            raise SystemExit(f"{preds} has rows but no run trace {tpath.name}: it cannot be resumed safely; "
+                             "remove it or use another --out")
+        old = json.loads(tpath.read_text(encoding="utf-8"))
+        if old != trace:
+            diff = sorted(k for k in trace.keys() | old.keys() if old.get(k) != trace.get(k))
+            raise SystemExit(f"{preds} belongs to another run (differs in {', '.join(diff)}): remove it or use another --out")
+    if text and not text.endswith("\n"):
+        text = text[: text.rfind("\n") + 1]
+        f.truncate(len(text.encode("utf-8")))
+    wanted = set(index)
+    done: dict[int, dict] = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        i = r["i"]
+        if i in done:
+            raise SystemExit(f"{preds}: item {i} appears twice")
+        if i not in wanted or (r["name"], r["label"]) != (items[i].name, items[i].label):
+            raise SystemExit(f"{preds}: item {i} ({r['name']}) is not a question of this run")
+        done[i] = r
+    if not done:
+        tmp = tpath.with_name(tpath.name + ".tmp")
+        tmp.write_text(json.dumps(trace, indent=2), encoding="utf-8")
+        tmp.replace(tpath)
+    return done
+
+
+@contextlib.contextmanager
+def locked_append(path: Path):
+    """`path` opened for reading and appending, with an exclusive lock: a second run on the same file stops at once."""
+    import fcntl
+
+    with path.open("a+", encoding="utf-8") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(f"{path} is in use by another run") from None
+        yield f
+
+
+def base_template_flags(examples, source: str) -> list[bool]:
+    """Per item of build_items (same pairs, same order): is the question a BASE_TEMPLATES template, by name or by
+    content? The rule of inference.D3Engine._use_base for the templates."""
+    from .d3train import select_pairs
+    from .taxonomy import load_taxonomy
+
+    universal = load_taxonomy().universal
+    templates = [universal[n] for n in BASE_TEMPLATES if n in universal]
+    return [name in BASE_TEMPLATES or ex.questions[name] in templates
+            for ex, name in select_pairs(examples, source, None)]
+
+
 def run_eval(a) -> None:
     import mlx.core as mx
 
@@ -428,33 +572,27 @@ def run_eval(a) -> None:
     examples = read_examples(a.data)
     source = a.label_source or ("gold" if any("gold" in ex.labels for ex in examples) else "final")
     items = build_items(examples, decider, source, None)
+    flags = base_template_flags(examples, source)
+    if len(flags) != len(items):
+        raise SystemExit(f"{len(flags)} base template flags for {len(items)} items")
     index = list(range(len(items)))
     if a.limit and a.limit < len(items):
         index = sorted(random.Random(a.seed).sample(index, a.limit))
     out = Path(a.out)
     preds = Path(a.preds) if a.preds else out.with_suffix(".preds.jsonl")
     preds.parent.mkdir(parents=True, exist_ok=True)
-    done = {}
-    if preds.is_file():  # resumable: items already predicted are not run again
-        text = preds.read_text(encoding="utf-8")
-        if text and not text.endswith("\n"):
-            # A run killed mid-write leaves a partial last line: drop it so new lines start clean.
-            text = text[: text.rfind("\n") + 1]
-            preds.write_text(text, encoding="utf-8")
-        for line in text.splitlines():
-            if line.strip():
-                r = json.loads(line)
-                done[r["i"]] = r
-    todo = [i for i in index if i not in done]
-    console.print(f"{len(index)} items, {len(done)} done, {len(todo)} to run ({decider.model.__class__.__module__})")
     t0, tokens, n = time.time(), 0, 0
-    with preds.open("a", encoding="utf-8") as f:
+    with locked_append(preds) as f:  # resumable: items already predicted are not run again
+        done = resume_rows(f, preds, run_trace(a, source), items, index)
+        todo = [i for i in index if i not in done]
+        console.print(f"{len(index)} items, {len(done)} done, {len(todo)} to run ({decider.model.__class__.__module__})")
         for batch in batches([len(items[i].ids) for i in todo], a.token_budget):
             sel = [todo[j] for j in batch]
             logits = decider.logits([items[i].ids for i in sel], [items[i].count for i in sel], base=a.base)
             for row, i in enumerate(sel):
                 it = items[i]
-                r = {"i": i, "name": it.name, "label": it.label, "probs": _softmax(logits[row, : it.count].tolist())}
+                r = {"i": i, "name": it.name, "label": it.label, "probs": _softmax(logits[row, : it.count].tolist()),
+                     "base_template": flags[i]}
                 done[i] = r
                 f.write(json.dumps(r) + "\n")
             f.flush()

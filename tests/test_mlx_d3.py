@@ -134,10 +134,29 @@ def test_left_padded_batch_matches_single_prompts(tiny):
 
 
 def test_full_attention_is_noncausal(tiny):
-    _, _, make = tiny
+    mx, _, make = tiny
     seq = [5, 6, 7, 8, 9, 10, 11, 12]
-    noncausal, causal = make().logits([seq], [4]), make(causal=True).logits([seq], [4])
+    readout = mx.random.normal((8, 64))   # one readout: only the mask differs between the two runs
+    noncausal, causal = make(readout=readout).logits([seq], [4]), make(causal=True, readout=readout).logits([seq], [4])
     assert abs(noncausal - causal).max() > 1e-4
+
+
+def test_base_temperature_divides_answers_without_an_adapter(tiny):
+    mx, model, _ = tiny
+
+    class Tok:
+        pad_token_id = 0
+
+    readout = mx.random.normal((8, 64))
+    seq = [5, 6, 7, 8, 9]
+    plain = mlx_d3.MLXDecider(model, readout, None, Tok(), list("ABCDEFGH"), {"on": False}).logits([seq], [4])
+    warm = mlx_d3.MLXDecider(model, readout, None, Tok(), list("ABCDEFGH"), {"on": False},
+                             base_temperature=2.0).logits([seq], [4])
+    assert abs(warm - plain / 2).max() < 1e-4
+    adapted = mlx_d3.MLXDecider(model, readout, readout, Tok(), list("ABCDEFGH"), {"on": False},
+                                base_temperature=2.0, has_adapter=True)
+    assert abs(adapted.logits([seq], [4]) - plain).max() < 1e-4             # adapter answer: no temperature
+    assert abs(adapted.logits([seq], [4], base=True) - plain / 2).max() < 1e-4   # base answer: divided
 
 
 def test_lora_switch_and_scale(tiny, tmp_path):
@@ -162,3 +181,124 @@ def test_lora_switch_and_scale(tiny, tmp_path):
     on = make(switch=switch, readout=readout).logits([seq], [4])
     assert abs(off - before).max() < 1e-5
     assert abs(on - before).max() > 1e-4
+
+
+# ---- model format, run trace, conversion (no MLX needed) ----------------------------------------------------
+
+def _model_dir(path, **cfg):
+    path.mkdir(parents=True, exist_ok=True)
+    base = {"format_id": "d3-code-readout-v1", "attention_mode": "noncausal_full_attention", "codes": list("ABCD")}
+    (path / "decision_config.json").write_text(json.dumps({**base, **cfg}), encoding="utf-8")
+    return path
+
+
+def test_load_refuses_d3_ultra_formats_before_loading_weights(tmp_path):
+    with pytest.raises(ValueError, match="prefix_bidir"):
+        mlx_d3.MLXDecider.load(str(_model_dir(tmp_path / "ultra", attention_mode="prefix_bidir",
+                                              prompt_layout="header-v1")))
+    with pytest.raises(ValueError, match="header-v1"):
+        mlx_d3.MLXDecider.load(str(_model_dir(tmp_path / "layout", prompt_layout="header-v1")))
+
+
+def test_load_refuses_an_adapter_of_another_base(tmp_path):
+    model = _model_dir(tmp_path / "d3")
+    adapter = tmp_path / "adapter"
+    adapter.mkdir()
+    (adapter / "pusula_d3.json").write_text(json.dumps({"attention_mode": "prefix_bidir", "prompt_layout": "header-v1"}))
+    with pytest.raises(ValueError, match="only fits its own base model"):
+        mlx_d3.MLXDecider.load(str(model), adapter=str(adapter))
+    (adapter / "pusula_d3.json").write_text(json.dumps({"format_id": "d3-code-readout-v1"}))   # trained on d3
+    fmt = mlx_d3.MLXDecider.check_format(model, adapter)
+    assert fmt.codes == list("ABCD") and fmt.temperature == 1.0
+
+
+class _Item:
+    def __init__(self, name, label):
+        self.name, self.label = name, label
+
+
+def _resume(preds, trace, items, index):
+    with mlx_d3.locked_append(preds) as f:
+        return mlx_d3.resume_rows(f, preds, trace, items, index)
+
+
+def test_resume_needs_the_same_run_trace(tmp_path):
+    preds = tmp_path / "run.preds.jsonl"
+    items = [_Item("duygu", 0), _Item("duygu", 1), _Item("aciliyet", 2)]
+    trace = {"mlx": "~/m", "bits": 4, "data_sha256": "x", "base": False, "limit": None, "seed": None}
+    assert _resume(preds, trace, items, [0, 1, 2]) == {}
+    assert json.loads(mlx_d3.trace_path(preds).read_text()) == trace
+    row = {"i": 0, "name": "duygu", "label": 0, "probs": [1.0, 0.0]}
+    preds.write_text(json.dumps(row) + "\n" + '{"i": 1, "na', encoding="utf-8")   # killed mid-write
+    assert _resume(preds, trace, items, [0, 1, 2]) == {0: row}
+    assert preds.read_text(encoding="utf-8") == json.dumps(row) + "\n"
+    with pytest.raises(SystemExit, match="base"):
+        _resume(preds, {**trace, "base": True}, items, [0, 1, 2])
+    with pytest.raises(SystemExit, match="not a question of this run"):
+        _resume(preds, trace, items, [1, 2])                                   # another --limit subset
+    with pytest.raises(SystemExit, match="not a question of this run"):
+        _resume(preds, trace, [_Item("aciliyet", 0)] + items[1:], [0, 1, 2])   # another data file
+    preds.write_text(json.dumps(row) + "\n" + json.dumps(row) + "\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="twice"):
+        _resume(preds, trace, items, [0, 1, 2])
+    mlx_d3.trace_path(preds).unlink()
+    with pytest.raises(SystemExit, match="no run trace"):
+        _resume(preds, trace, items, [0, 1, 2])
+
+
+def test_a_second_run_on_the_same_preds_file_stops(tmp_path):
+    preds = tmp_path / "run.preds.jsonl"
+    with mlx_d3.locked_append(preds):
+        with pytest.raises(SystemExit, match="in use"):
+            with mlx_d3.locked_append(preds):
+                pass
+
+
+def test_combine_sends_templates_recognized_by_content_to_base_d3():
+    adapter = _rows([(0, "duygu", 1, 1, 3), (1, "eksik_bilgi_v2", 0, 1, 2)])
+    adapter[1]["base_template"] = True    # eval matched the question to the eksik_bilgi template by its content
+    base = _rows([(0, "duygu", 1, 0, 3), (1, "eksik_bilgi_v2", 0, 0, 2)])
+    rows = mlx_d3.combine_own_base(adapter, base)
+    assert rows[0] is adapter[0] and rows[1] is base[1]
+
+
+def test_base_template_flags_match_by_name_and_content():
+    from pusula.schema import Example
+    from pusula.taxonomy import load_taxonomy
+
+    universal = load_taxonomy().universal
+    q = universal["eksik_bilgi"]
+    other = next(v for k, v in universal.items() if k != "eksik_bilgi")
+    keys = q.option_keys()
+    ex = Example(id="x", state="durum", questions={"eksik_bilgi": q, "renamed": q, "other": other},
+                 labels={"gold": {"eksik_bilgi": keys[0], "renamed": keys[0], "other": other.option_keys()[0]}})
+    assert mlx_d3.base_template_flags([ex], "gold") == [True, True, False]
+
+
+def test_base_templates_follow_the_gpu_engine():
+    pytest.importorskip("torch")
+    from pusula.inference import D3Engine
+
+    assert mlx_d3.BASE_TEMPLATES == tuple(D3Engine.BASE_TEMPLATES)
+
+
+def test_convert_refuses_an_existing_output_and_a_source_without_licenses(tmp_path):
+    src = _model_dir(tmp_path / "d3")
+    for name in ("tokenizer.json", "tokenizer_config.json", "readout.safetensors", "LICENSE"):
+        (src / name).write_text("x")
+    with pytest.raises(SystemExit, match="NOTICE"):
+        mlx_d3.convert(str(src), str(tmp_path / "out"), 4)
+    (tmp_path / "out").mkdir()
+    with pytest.raises(SystemExit, match="already exists"):
+        mlx_d3.convert(str(src), str(tmp_path / "out"), 4)
+
+
+def test_missing_files_lists_what_an_interrupted_conversion_lacks(tmp_path):
+    d = tmp_path / "m"
+    d.mkdir()
+    (d / "config.json").write_text("{}")
+    assert "model*.safetensors" in mlx_d3.missing_files(d) and "LICENSE" in mlx_d3.missing_files(d)
+    for name in mlx_d3.REQUIRED_FILES:
+        (d / name).write_text("x")
+    (d / "model.safetensors").write_text("x")
+    assert mlx_d3.missing_files(d) == []
