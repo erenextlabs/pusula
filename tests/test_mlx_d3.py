@@ -302,3 +302,49 @@ def test_missing_files_lists_what_an_interrupted_conversion_lacks(tmp_path):
         (d / name).write_text("x")
     (d / "model.safetensors").write_text("x")
     assert mlx_d3.missing_files(d) == []
+
+
+def test_missing_files_checks_every_shard_of_the_index(tmp_path):
+    d = tmp_path / "m"
+    d.mkdir()
+    for name in mlx_d3.REQUIRED_FILES:
+        (d / name).write_text("x")
+    shards = ["model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"]
+    (d / "model.safetensors.index.json").write_text(json.dumps({"weight_map": {"a": shards[0], "b": shards[1]}}))
+    (d / shards[0]).write_text("x")
+    assert mlx_d3.missing_files(d) == [shards[1]]
+    (d / shards[1]).write_text("x")
+    assert mlx_d3.missing_files(d) == []
+
+
+def test_run_trace_writes_relative_paths_in_full(tmp_path, monkeypatch):
+    import argparse
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for folder in ("one", "two"):
+        (tmp_path / folder / "m").mkdir(parents=True)
+        (tmp_path / folder / "m" / "config.json").write_text(json.dumps({"pusula_mlx": {"bits": 4}}))
+    data = tmp_path / "bench.jsonl"
+    data.write_text("{}\n")
+    a = argparse.Namespace(mlx="m", adapter="m", data=str(data), base=False, limit=0, seed=0, causal=False)
+    traces = []
+    for folder in ("one", "two"):
+        monkeypatch.chdir(tmp_path / folder)
+        traces.append(mlx_d3.run_trace(a, "gold"))
+    assert traces[0]["mlx"] == "~/one/m" and traces[0]["adapter"] == "~/one/m"
+    assert traces[0] != traces[1]
+
+
+def test_eval_takes_the_lock_before_it_loads_the_model(tmp_path, monkeypatch):
+    pytest.importorskip("mlx.core")
+    import argparse
+
+    def no_load(*args, **kwargs):
+        raise AssertionError("the model was loaded although the preds file is in use")
+
+    monkeypatch.setattr(mlx_d3.MLXDecider, "load", no_load)
+    out = tmp_path / "run.json"
+    a = argparse.Namespace(mlx="m", adapter=None, causal=False, data="d", out=str(out), preds=None, cache_gb=2.0)
+    with mlx_d3.locked_append(out.with_suffix(".preds.jsonl")):
+        with pytest.raises(SystemExit, match="in use"):
+            mlx_d3.run_eval(a)
