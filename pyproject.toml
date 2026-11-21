@@ -57,6 +57,12 @@ d3 = [
     "einops",
     "flash-linear-attention",
 ]
+# Pusula and Decision 3.0 on Apple silicon (MLX): python -m pusula.mlx_d3
+mlx = [
+    "mlx>=0.32; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-lm>=0.32; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "transformers>=5.17",
+]
 dev = [
     "pusula[serve,generate]",
     "pytest>=8.0",
@@ -80,6 +86,7 @@ pusula = ["data/*.yaml", "data/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 110
