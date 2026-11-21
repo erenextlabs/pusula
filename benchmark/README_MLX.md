@@ -152,8 +152,9 @@ python -m pusula.mlx_preds compare gpu-pusula.preds.jsonl local/mlx/4bit-pusula.
 ## Long runs
 
 `scripts/mlx_bench.sh` runs base Decision 3.0 and Pusula at each bit level one after another. It converts a model
-first when it is missing or lacks a required file, restarts a run after a crash, and keeps the Mac awake (`caffeinate`). Reports go to
-`local/mlx/` (`OUT=` changes this).
+first when it is missing or lacks a required file (every shard of `model.safetensors.index.json` included; if
+the check itself fails, the script stops and deletes nothing), restarts a run after a crash, and keeps the Mac awake
+(`caffeinate`). Reports go to `local/mlx/` (`OUT=` changes this).
 
 ```
 nohup bash scripts/mlx_bench.sh 4bit-base 4bit-pusula > ~/models/mlx_bench.out 2>&1 &

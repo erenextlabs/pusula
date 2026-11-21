@@ -62,7 +62,12 @@ run_one() {
 
   # convert writes into $mlx.partial and renames it only when every required file is there;
   # a directory that still lacks one (made by an older convert) is converted again.
-  if ! "$PY" -I -c 'import sys; from pusula.mlx_d3 import missing_files; sys.exit(1 if missing_files(sys.argv[1]) else 0)' "$mlx"; then
+  # Exit 0: complete, 10: a file is missing; any other code is a failed check and stops the script
+  # (never a reason to delete a model).
+  local rc=0
+  "$PY" -c 'import sys; from pusula.mlx_d3 import missing_files; sys.exit(10 if missing_files(sys.argv[1]) else 0)' "$mlx" || rc=$?
+  if (( rc != 0 && rc != 10 )); then log "cannot check $mlx (exit $rc), stopped"; exit 1; fi
+  if (( rc == 10 )); then
     log "converting d3 to ${bits}-bit: $mlx"
     rm -rf "$mlx" "$mlx.partial"
     caffeinate -i "$PY" -m pusula.mlx_d3 convert --d3 "$MODELS/d3" --out "$mlx" --bits "$bits"

@@ -79,10 +79,15 @@ def build_model(config: dict):
 
 
 def missing_files(mlx_dir: str | Path) -> list[str]:
-    """The files a complete `convert` output has and `mlx_dir` lacks (empty: the directory is complete)."""
+    """The files a complete `convert` output has and `mlx_dir` lacks (empty: the directory is complete). With a
+    sharded checkpoint every shard named in model.safetensors.index.json must be there."""
     path = Path(mlx_dir).expanduser()
     missing = [name for name in REQUIRED_FILES if not (path / name).is_file()]
-    if not any(path.glob("model*.safetensors")):
+    index = path / "model.safetensors.index.json"
+    if index.is_file():
+        shards = sorted(set(json.loads(index.read_text(encoding="utf-8")).get("weight_map", {}).values()))
+        missing += [name for name in shards if not (path / name).is_file()] or ([] if shards else [index.name])
+    elif not any(path.glob("model*.safetensors")):
         missing.append("model*.safetensors")
     return missing
 
@@ -486,10 +491,13 @@ def _sha256(path) -> str:
 
 def run_trace(a, source: str) -> dict:
     """What fixes the rows of an `eval` run: a preds file is resumed only by a run with the same trace."""
+    def full(path: Optional[str]) -> Optional[str]:   # relative paths from two folders must not look the same
+        return shown_path(str(Path(path).expanduser().resolve())) if path else None
+
     mlx = Path(a.mlx).expanduser()
     meta = json.loads((mlx / "config.json").read_text(encoding="utf-8")).get("pusula_mlx", {})
-    return {"mlx": shown_path(a.mlx), "bits": meta.get("bits"), "group_size": meta.get("group_size"),
-            "adapter": shown_path(a.adapter), "data_sha256": _sha256(a.data), "label_source": source,
+    return {"mlx": full(a.mlx), "bits": meta.get("bits"), "group_size": meta.get("group_size"),
+            "adapter": full(a.adapter), "data_sha256": _sha256(a.data), "label_source": source,
             "base": bool(a.base), "limit": a.limit or None, "seed": a.seed if a.limit else None, "causal": bool(a.causal)}
 
 
@@ -568,21 +576,22 @@ def run_eval(a) -> None:
     # MLX keeps freed buffers in its cache for reuse; with prompts of many lengths that cache grows to about the
     # size of the model (30 GB peak at 4-bit before this limit). A small cache keeps 6-bit and 8-bit within 36 GB.
     mx.set_cache_limit(int(a.cache_gb * 2**30))
-    decider = MLXDecider.load(a.mlx, adapter=a.adapter, causal=a.causal)
-    examples = read_examples(a.data)
-    source = a.label_source or ("gold" if any("gold" in ex.labels for ex in examples) else "final")
-    items = build_items(examples, decider, source, None)
-    flags = base_template_flags(examples, source)
-    if len(flags) != len(items):
-        raise SystemExit(f"{len(flags)} base template flags for {len(items)} items")
-    index = list(range(len(items)))
-    if a.limit and a.limit < len(items):
-        index = sorted(random.Random(a.seed).sample(index, a.limit))
     out = Path(a.out)
     preds = Path(a.preds) if a.preds else out.with_suffix(".preds.jsonl")
     preds.parent.mkdir(parents=True, exist_ok=True)
-    t0, tokens, n = time.time(), 0, 0
+    # the lock comes first: a second run on the same file stops before it loads the model
     with locked_append(preds) as f:  # resumable: items already predicted are not run again
+        decider = MLXDecider.load(a.mlx, adapter=a.adapter, causal=a.causal)
+        examples = read_examples(a.data)
+        source = a.label_source or ("gold" if any("gold" in ex.labels for ex in examples) else "final")
+        items = build_items(examples, decider, source, None)
+        flags = base_template_flags(examples, source)
+        if len(flags) != len(items):
+            raise SystemExit(f"{len(flags)} base template flags for {len(items)} items")
+        index = list(range(len(items)))
+        if a.limit and a.limit < len(items):
+            index = sorted(random.Random(a.seed).sample(index, a.limit))
+        t0, tokens, n = time.time(), 0, 0
         done = resume_rows(f, preds, run_trace(a, source), items, index)
         todo = [i for i in index if i not in done]
         console.print(f"{len(index)} items, {len(done)} done, {len(todo)} to run ({decider.model.__class__.__module__})")
