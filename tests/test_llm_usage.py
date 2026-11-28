@@ -117,3 +117,32 @@ def test_server_start_wait_reads_env(monkeypatch):
     monkeypatch.setenv("LLM_SERVER_WAIT", "0")
     with pytest.raises(ServerUnavailable, match=r"in 0s"):
         asyncio.run(wait_for_server("http://127.0.0.1:9/v1"))
+
+
+def test_server_wait_sends_api_key(monkeypatch):
+    """Hosted endpoints (e.g. AMD Token Lab) answer /models with 401 without the key; a local vLLM needs none."""
+    import urllib.request
+
+    from pusula.llm import wait_for_server
+
+    seen = []
+
+    class _Ok:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req.get_header("Authorization"))
+        return _Ok()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("LLM_API_KEY", "k-test")
+    asyncio.run(wait_for_server("http://127.0.0.1:9/v1", timeout_s=0.0))
+    monkeypatch.delenv("LLM_API_KEY")
+    asyncio.run(wait_for_server("http://127.0.0.1:9/v1", timeout_s=0.0))
+    assert seen == ["Bearer k-test", None]

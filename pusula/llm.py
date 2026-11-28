@@ -111,10 +111,12 @@ async def wait_for_server(base_url: str = DEFAULT_BASE_URL, timeout_s: float | N
     if timeout_s is None:
         timeout_s = float(os.getenv("LLM_SERVER_WAIT", "3600"))
     url = base_url.rstrip("/") + "/models"
+    key = os.getenv("LLM_API_KEY", "EMPTY")   # hosted endpoints answer /models only with the key (401 without it)
+    req = urllib.request.Request(url, headers={} if key == "EMPTY" else {"Authorization": f"Bearer {key}"})
     t0 = time.time()
     while True:
         try:
-            with urllib.request.urlopen(url, timeout=5) as r:
+            with urllib.request.urlopen(req, timeout=5) as r:
                 if r.status == 200:
                     return
         except Exception:
